@@ -1016,7 +1016,11 @@ static void setupSerial()
         // For PWM receivers with no CRSF I/O, only turn on the Serial port if logging is on
         #if defined(DEBUG_LOG)
         Serial.begin(firmwareOptions.uart_baud);
+        #if defined(PLATFORM_ESP32)
+        SerialLogger = new BufferedStream(&Serial);
+        #else
         SerialLogger = &Serial;
+        #endif
         #else
         SerialLogger = new NullStream();
         #endif
@@ -1075,7 +1079,11 @@ static void setupSerial()
     Serial.begin(firmwareOptions.uart_baud, SERIAL_8N1, -1, -1, firmwareOptions.invert_tx);
 #endif
 
+#if defined(PLATFORM_ESP32)
+    SerialLogger = new BufferedStream(&Serial);
+#else
     SerialLogger = &Serial;
+#endif
 }
 
 static void setupConfigAndPocCheck()

@@ -33,6 +33,12 @@ static int timeout()
     crsf.RXhandleUARTout();
     HandleUARTin();
 
+#if defined(PLATFORM_ESP32)
+    // Flush the LOGGING_UART here so all serial IO is done in the same context
+    // and does not crash the ESP32. Doing it from ISR and the 2 cores will cause
+    // it to crash! So we use a buffer stream and flush here.
+    LOGGING_UART.flush();
+#endif
     return DURATION_IMMEDIATELY;
 }
 
