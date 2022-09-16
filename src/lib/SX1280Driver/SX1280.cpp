@@ -587,7 +587,10 @@ void ICACHE_RAM_ATTR SX1280Driver::IsrCallback(SX1280_Radio_Number_t radioNumber
         if (instance->RXnbISR(irqStatus, radioNumber))
         {
             instance->lastSuccessfulPacketRadio = radioNumber;
-            instance->ClearIrqStatus(SX1280_IRQ_RADIO_ALL, radioNumber == SX1280_Radio_1 ? SX1280_Radio_2 : SX1280_Radio_1);
+            if (GPIO_PIN_DIO1_2 != UNDEF_PIN)
+            {
+                instance->ClearIrqStatus(SX1280_IRQ_RADIO_ALL, radioNumber == SX1280_Radio_1 ? SX1280_Radio_2 : SX1280_Radio_1);
+            }
         }
     }
 }
