@@ -370,6 +370,15 @@
                 "upload_methods": ["uart", "wifi"],
                 "platform": "esp32",
                 "firmware": "Unified_ESP32_900_TX"
+            },
+            "nano": {
+                "product_name": "EMAX Nano 900MHz TX",
+                "lua_name": "EMAX NANO 900TX",
+                "layout_file": "EMAX 900 Nano.json",
+                "features": ["fan"],
+                "upload_methods": ["uart", "wifi"],
+                "platform": "esp32",
+                "firmware": "Unified_ESP32_900_TX"
             }
         },
         "rx_900": {
@@ -387,6 +396,16 @@
                 "product_name": "EMAX OLED 2.4GHz TX",
                 "lua_name": "EMAX 2400TX",
                 "layout_file": "EMAX 2400 OLED.json",
+                "features": ["fan"],
+                "upload_methods": ["uart", "wifi"],
+                "platform": "esp32",
+                "firmware": "Unified_ESP32_2400_TX"
+            },
+            "nano": {
+                "product_name": "EMAX Nano 2.4GHz TX",
+                "lua_name": "EMAX NANO 2G4TX",
+                "layout_file": "EMAX 2400 Nano.json",
+                "features": ["fan"],
                 "upload_methods": ["uart", "wifi"],
                 "platform": "esp32",
                 "firmware": "Unified_ESP32_2400_TX"
