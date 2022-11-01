@@ -300,6 +300,38 @@
             }
         }
     },
+    "experimental": {
+        "name": "Experimental Targets",
+        "tx_2400": {
+            "micro": {
+                "product_name": "Experimental Micro 2.4GHz TX",
+                "lua_name": "Exp Micro",
+                "layout_file": "Experimental Micro.json",
+                "upload_methods": ["uart", "wifi"],
+                "platform": "esp32",
+                "firmware": "Unified_ESP32_2400_TX"
+            },
+            "nano": {
+                "product_name": "Experimental Nano 2.4GHz TX",
+                "lua_name": "Exp Nano",
+                "layout_file": "Experimental Micro.json",
+                "overlay": {
+                    "power_values": [-18,-15,-12,-8,-5,0]
+                },
+                "upload_methods": ["uart", "wifi"],
+                "platform": "esp32",
+                "firmware": "Unified_ESP32_2400_TX"
+            },
+            "full": {
+                "product_name": "Experimental Full 2.4GHz TX",
+                "lua_name": "Exp Full",
+                "layout_file": "Experimental Full.json",
+                "upload_methods": ["uart", "wifi"],
+                "platform": "esp32",
+                "firmware": "Unified_ESP32_2400_TX"
+            }
+        }
+    },
     "flywoo": {
         "name": "Flywoo",
         "rx_2400": {
