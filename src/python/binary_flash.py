@@ -41,6 +41,9 @@ bootloader_args = {
     'FM30_TX': {'offset': 0x1000, 'bootloader': 'fm30_bootloader.bin'},
     'FM30_RX_MINI': {'offset': 0x4000, 'bootloader': 'fm30_mini_bootloader.bin'},
     'FM30_RX_MINI_AS_TX': {'offset': 0x4000, 'bootloader': 'fm30_mini_bootloader.bin'},
+
+    'MLRS_TX': {'offset': 0x1000, 'bootloader': 'mlrs_bootloader.bin'},
+    'MLRS_RX': {'offset': 0x1000, 'bootloader': 'mlrs_rx_bootloader.bin'},
 }
 
 class UploadMethod(Enum):

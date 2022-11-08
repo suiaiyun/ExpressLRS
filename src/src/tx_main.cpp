@@ -916,6 +916,16 @@ static void setupTarget()
   CRSF::PortSecondary = uart2;
 #endif
 
+#if defined(TARGET_TX_MLRS)
+  pinMode(GPIO_PIN_LED_RED, OUTPUT); 
+  digitalWrite(GPIO_PIN_LED_RED, HIGH);
+  pinMode(GPIO_PIN_LED_GREEN, OUTPUT);
+  digitalWrite(GPIO_PIN_LED_GREEN, HIGH);
+  HardwareSerial *uart3 = new HardwareSerial(USART3);
+  uart3->begin(57600);
+  CRSF::PortSecondary = uart3;
+#endif
+
 #if defined(TARGET_TX_FM30_MINI)
   pinMode(GPIO_PIN_UART1TX_INVERT, OUTPUT); // TX1 inverter used for debug
   digitalWrite(GPIO_PIN_UART1TX_INVERT, LOW);

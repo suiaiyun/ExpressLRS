@@ -1279,5 +1279,34 @@
                 "prior_target_name": "Vantac_2400_RX"
             }
         }
-    }
+    },
+    "mlrs": {
+        "name": "MLRS",
+        "tx_2400": {
+            "e28": {
+                "product_name": "MLRS E28 2.4GHz TX",
+                "upload_methods": ["dfu", "stlink"],
+                "platform": "stm32",
+                "firmware": "MLRS_TX",
+                "stlink": {
+                    "cpus": ["STM32F103C8T6", "STM32F103CBT6"],
+                    "offset": "0x1000",
+                    "bootloader": "mlrs_bootloader.bin"
+                }
+            }
+        },
+        "rx_2400": {
+            "e28": {
+                "product_name": "MLRS E28 2.4GHz RX",
+                "upload_methods": ["uart", "stlink"],
+                "platform": "stm32",
+                "firmware": "MLRS_RX",
+                "stlink": {
+                    "cpus": ["STM32F103C8T6", "STM32F103CBT6"],
+                    "offset": "0x1000",
+                    "bootloader": "mlrs_bootloader.bin"
+                }
+            }
+        }
+    },
 }
