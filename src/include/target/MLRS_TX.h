@@ -20,9 +20,7 @@
 #define GPIO_PIN_RCSIGNAL_RX    PA3  // UART2
 #define GPIO_PIN_RCSIGNAL_TX    PA2  // UART2
 
-#define GPIO_PIN_BUFFER_OE      PB7  //CONFIRMED
-#define GPIO_PIN_BUFFER_OE_INVERTED 0
-
+#define GPIO_PIN_BUZZER         PB7
 #define GPIO_PIN_BUTTON         PA15 // active low
 #define GPIO_PIN_LED_RED        PC13 // Right Red LED
 #define GPIO_LED_RED_INVERTED   1
