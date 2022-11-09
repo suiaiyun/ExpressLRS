@@ -1285,7 +1285,7 @@
         "tx_2400": {
             "e28": {
                 "product_name": "MLRS E28 2.4GHz TX",
-                "upload_methods": ["dfu", "stlink"],
+                "upload_methods": ["dfu", "stlink", "uart"],
                 "platform": "stm32",
                 "firmware": "MLRS_TX",
                 "stlink": {
@@ -1298,7 +1298,7 @@
         "rx_2400": {
             "e28": {
                 "product_name": "MLRS E28 2.4GHz RX",
-                "upload_methods": ["uart", "stlink"],
+                "upload_methods": ["dfu", "uart", "stlink"],
                 "platform": "stm32",
                 "firmware": "MLRS_RX",
                 "stlink": {
