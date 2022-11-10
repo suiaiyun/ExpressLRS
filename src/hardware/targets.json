@@ -1306,7 +1306,18 @@
                     "offset": "0x1000",
                     "bootloader": "mlrs_bootloader.bin"
                 }
+            },
+            "mini": {
+                "product_name": "MLRS E28 2.4GHz RX Mini",
+                "upload_methods": ["dfu", "uart", "stlink"],
+                "platform": "stm32",
+                "firmware": "MLRS_RX",
+                "stlink": {
+                    "cpus": ["STM32F103C8T6", "STM32F103CBT6"],
+                    "offset": "0x1000",
+                    "bootloader": "mlrs_mini_bootloader.bin"
+                }
             }
         }
-    },
+    }
 }

@@ -917,10 +917,8 @@ static void setupTarget()
 #endif
 
 #if defined(TARGET_TX_MLRS)
-  pinMode(GPIO_PIN_LED_RED, OUTPUT); 
-  digitalWrite(GPIO_PIN_LED_RED, HIGH);
-  pinMode(GPIO_PIN_LED_GREEN, OUTPUT);
-  digitalWrite(GPIO_PIN_LED_GREEN, HIGH);
+  pinMode(GPIO_PIN_UART2RX_INVERT, OUTPUT);
+  digitalWrite(GPIO_PIN_UART2RX_INVERT, LOW);
   HardwareSerial *uart3 = new HardwareSerial(USART3);
   uart3->begin(57600);
   CRSF::PortSecondary = uart3;
