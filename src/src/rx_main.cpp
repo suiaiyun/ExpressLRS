@@ -1127,7 +1127,7 @@ static void setupTarget()
 #endif
 
 #if defined(TARGET_RX_MLRS)
-  pinMode(GPIO_PIN_UART2RX_INVERT, OUTPUT);
+  pinMode(GPIO_PIN_UART2TX_INVERT, OUTPUT);
   digitalWrite(GPIO_PIN_UART2TX_INVERT, LOW);
 #endif
 
