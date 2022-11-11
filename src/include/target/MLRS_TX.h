@@ -4,8 +4,6 @@
 
 // There is some special handling for this target
 #define TARGET_TX_MLRS
-#define USE_SX1280_DCDC
-//#define CRITICAL_FLASH
 
 // GPIO pin definitions
 #define GPIO_PIN_NSS            PB0
@@ -14,6 +12,7 @@
 #define GPIO_PIN_MISO           PA6
 #define GPIO_PIN_SCK            PA5
 #define GPIO_PIN_RST            PB5
+#define GPIO_PIN_BUSY           PB4
 #define GPIO_PIN_TX_ENABLE      PB12
 #define GPIO_PIN_RX_ENABLE      PB8
 #define GPIO_PIN_RCSIGNAL_RX    PA3  // UART2
