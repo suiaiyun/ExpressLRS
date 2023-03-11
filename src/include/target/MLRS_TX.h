@@ -26,6 +26,7 @@
 #define GPIO_PIN_DEBUG_RX       PA10 // UART1 (usb)
 #define GPIO_PIN_DEBUG_TX       PA9  // UART1 (usb)
 #define GPIO_PIN_UART2RX_INVERT PC15 // XOR chip
+#define GPIO_PIN_UART2TX_INVERT PB9 // XOR chip
 
 // Power output
 #define MinPower                PWR_10mW
