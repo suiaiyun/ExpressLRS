@@ -1,12 +1,12 @@
 {
-    "comment": "STM32F103C8 definition for use with 8MHz crystal (DIV2 prescaler)",
+    "comment": "STM32F103CB definition for use with 8MHz crystal (DIV2 prescaler)",
     "build": {
       "core": "stm32",
       "extra_flags": "-DSTM32F103xB",
       "cpu": "cortex-m3",
       "f_cpu": "72000000L",
       "ldscript": "variants/E28dual/ldscript.ld",
-      "mcu": "stm32f103c8t6",
+      "mcu": "stm32f103cbt6",
       "variants_dir": "variants",
       "variant": "E28dual"
     },
@@ -14,7 +14,7 @@
       "default_tools": [
         "stlink"
       ],
-      "jlink_device": "STM32F103C8",
+      "jlink_device": "STM32F103CB",
       "openocd_extra_args": [
         "-c",
         "reset_config none"
@@ -32,7 +32,7 @@
     "name": "E28dual",
     "upload": {
       "maximum_ram_size": 20480,
-      "maximum_size": 65536,
+      "maximum_size": 131072,
       "protocol": "stlink",
       "protocols": [
         "jlink",
