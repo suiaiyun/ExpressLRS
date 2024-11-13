@@ -1230,7 +1230,11 @@ static void setupSerial()
     Stream *serialPort = new NullStream();
   #endif
 #elif (defined(GPIO_PIN_DEBUG_RX) && GPIO_PIN_DEBUG_RX != UNDEF_PIN) || (defined(GPIO_PIN_DEBUG_TX) && GPIO_PIN_DEBUG_TX != UNDEF_PIN)
-  HardwareSerial *serialPort = new HardwareSerial(2);
+  #if defined(TARGET_TX_MLRS)
+    HardwareSerial *serialPort = new HardwareSerial(USART3);
+  #else
+    HardwareSerial *serialPort = new HardwareSerial(2);
+  #endif
   #if defined(GPIO_PIN_DEBUG_RX) && GPIO_PIN_DEBUG_RX != UNDEF_PIN
     serialPort->setRx(GPIO_PIN_DEBUG_RX);
   #endif
@@ -1301,9 +1305,6 @@ static void setupTarget()
   digitalWrite(GPIO_PIN_UART2RX_INVERT, HIGH);
   pinMode(GPIO_PIN_UART2TX_INVERT, OUTPUT);
   digitalWrite(GPIO_PIN_UART2TX_INVERT, HIGH);
-  HardwareSerial *uart3 = new HardwareSerial(USART3);
-  uart3->begin(57600);
-  CRSF::PortSecondary = uart3;
 #endif
 
 #if defined(TARGET_TX_FM30_MINI)

@@ -147,6 +147,8 @@ uint32_t serialBaud;
     HardwareSerial SERIAL_PROTOCOL_TX(USART2);
 #elif defined(TARGET_DIY_900_RX_STM32)
     HardwareSerial SERIAL_PROTOCOL_TX(USART1);
+#elif defined(TARGET_RX_MLRS)
+    HardwareSerial SERIAL_PROTOCOL_TX(USART2);
 #else
     #define SERIAL_PROTOCOL_TX Serial
 
@@ -170,7 +172,7 @@ SerialIO *serialIO = nullptr;
 #elif defined(TARGET_R9SLIMPLUS_RX) /* !TARGET_R9SLIMPLUS_RX */
     #define SERIAL_PROTOCOL_RX CrsfRxSerial
     HardwareSerial CrsfRxSerial(USART3);
-#elif defined(TARGET_RX_FM30_MINI)
+#elif defined(TARGET_RX_FM30_MINI) || defined(TARGET_RX_MLRS)
     #define SERIAL_PROTOCOL_RX SERIAL_PROTOCOL_TX
 #else
     #define SERIAL_PROTOCOL_RX Serial
@@ -1373,6 +1375,14 @@ static void setupSerial()
     SERIAL_PROTOCOL_RX.begin(serialBaud);
 
     SERIAL_PROTOCOL_TX.setTx(GPIO_PIN_RCSIGNAL_TX);
+#elif defined(TARGET_RX_MLRS)
+    if (invert)
+    {
+        // SBUS invert
+        digitalWrite(GPIO_PIN_UART2TX_INVERT, HIGH);
+    }
+    SERIAL_PROTOCOL_TX.setTx(GPIO_PIN_RCSIGNAL_TX);
+    SERIAL_PROTOCOL_TX.setRx(GPIO_PIN_RCSIGNAL_RX);
 #else
 #if defined(GPIO_PIN_RCSIGNAL_RX_SBUS) && defined(GPIO_PIN_RCSIGNAL_TX_SBUS)
     if (invert)

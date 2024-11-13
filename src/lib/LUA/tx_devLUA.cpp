@@ -243,6 +243,15 @@ struct luaItem_selection luaBluetoothTelem = {
 };
 #endif
 
+#if defined(TARGET_TX_MLRS)
+struct luaItem_selection luaBluetoothTelem = {
+    {"BT Telemetry", CRSF_TEXT_SELECTION},
+    1, // value
+    "On",
+    STR_EMPTYSPACE
+};
+#endif
+
 //---------------------------- BACKPACK ------------------
 static struct luaItem_folder luaBackpackFolder = {
     {"Backpack", CRSF_FOLDER},
@@ -675,6 +684,11 @@ static void registerLuaParameters()
       devicesTriggerEvent();
     });
     #endif
+    #if defined(TARGET_TX_MLRS)
+    registerLUAParameter(&luaBluetoothTelem, [](struct luaPropertiesCommon *item, uint8_t arg) {
+      devicesTriggerEvent();
+    });
+    #endif
     if (!firmwareOptions.is_airport)
     {
       registerLUAParameter(&luaSwitch, [](struct luaPropertiesCommon *item, uint8_t arg) {
@@ -923,6 +937,9 @@ static int event()
   }
 #if defined(TARGET_TX_FM30)
   setLuaTextSelectionValue(&luaBluetoothTelem, !digitalRead(GPIO_PIN_BLUETOOTH_EN));
+#endif
+#if defined(TARGET_TX_MLRS)
+  setLuaTextSelectionValue(&luaBluetoothTelem, HIGH);
 #endif
   luadevUpdateFolderNames();
   return DURATION_IMMEDIATELY;
