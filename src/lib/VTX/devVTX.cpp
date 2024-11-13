@@ -8,18 +8,19 @@
 #include "logging.h"
 
 #include "devButton.h"
+#include "handset.h"
 
-#define PITMODE_OFF     0
-#define PITMODE_ON      1
+#define PITMODE_NOT_INITIALISED    -1
+#define PITMODE_OFF                 0
+#define PITMODE_ON                  1
 
 // Delay after disconnect to preserve the VTXSS_CONFIRMED status
 // Needs to be long enough to reconnect, but short enough to
 // reset between the user switching equipment
 #define VTX_DISCONNECT_DEBOUNCE_MS (10 * 1000)
 
-extern CRSF crsf;
 extern Stream *TxBackpack;
-static uint8_t pitmodeAuxState = 0;
+static int pitmodeAuxState = PITMODE_NOT_INITIALISED;
 static bool sendEepromWrite = true;
 
 static enum VtxSendState_e
@@ -33,23 +34,29 @@ static enum VtxSendState_e
 void VtxTriggerSend()
 {
     VtxSendState = VTXSS_MODIFIED;
+    sendEepromWrite = true;
     devicesTriggerEvent();
 }
 
 void VtxPitmodeSwitchUpdate()
 {
-    if (config.GetVtxPitmode() == PITMODE_OFF)
+    if (config.GetVtxPitmode() <= PITMODE_ON)
     {
+        pitmodeAuxState = config.GetVtxPitmode();
         return;
     }
 
     uint8_t auxInverted = config.GetVtxPitmode() % 2;
     uint8_t auxNumber = (config.GetVtxPitmode() / 2) + 3;
-    uint8_t currentPitmodeAuxState = CRSF_to_BIT(crsf.ChannelData[auxNumber]) ^ auxInverted;
+    uint8_t newPitmodeAuxState = CRSF_to_BIT(ChannelData[auxNumber]) ^ auxInverted;
 
-    if (pitmodeAuxState != currentPitmodeAuxState)
+    if (pitmodeAuxState == PITMODE_NOT_INITIALISED)
     {
-        pitmodeAuxState = currentPitmodeAuxState;
+        pitmodeAuxState = newPitmodeAuxState;
+    }
+    else if (pitmodeAuxState != newPitmodeAuxState)
+    {
+        pitmodeAuxState = newPitmodeAuxState;
         sendEepromWrite = false;
         VtxTriggerSend();
     }
@@ -61,7 +68,7 @@ static void eepromWriteToMSPOut()
     packet.reset();
     packet.function = MSP_EEPROM_WRITE;
 
-    crsf.AddMspMessage(&packet);
+    CRSF::AddMspMessage(&packet, CRSF_ADDRESS_FLIGHT_CONTROLLER);
 }
 
 static void VtxConfigToMSPOut()
@@ -73,24 +80,17 @@ static void VtxConfigToMSPOut()
     packet.reset();
     packet.makeCommand();
     packet.function = MSP_SET_VTX_CONFIG;
-    packet.addByte(vtxIdx);
-    packet.addByte(0);
-    if (config.GetVtxPower()) {
+    packet.addByte(vtxIdx);     // band/channel or frequency low byte
+    packet.addByte(0);          // frequency high byte, if frequency mode
+    if (config.GetVtxPower())
+    {
         packet.addByte(config.GetVtxPower());
-
-        if (config.GetVtxPitmode() == PITMODE_OFF || config.GetVtxPitmode() == PITMODE_ON)
-        {
-            packet.addByte(config.GetVtxPitmode());
-        }
-        else
-        {
-            packet.addByte(pitmodeAuxState);
-        }
+        packet.addByte(pitmodeAuxState);
     }
 
-    crsf.AddMspMessage(&packet);
+    CRSF::AddMspMessage(&packet, CRSF_ADDRESS_FLIGHT_CONTROLLER);
 
-    if (!crsf.IsArmed()) // Do not send while armed.  There is no need to change the video frequency while armed.  It can also cause VRx modules to flash up their OSD menu e.g. Rapidfire.
+    if (!handset->IsArmed()) // Do not send while armed.  There is no need to change the video frequency while armed.  It can also cause VRx modules to flash up their OSD menu e.g. Rapidfire.
     {
         MSP::sendPacket(&packet, TxBackpack); // send to tx-backpack as MSP
     }
@@ -164,7 +164,7 @@ static int timeout()
         VtxSendState = VTXSS_UNKNOWN;
         // Never received a connection, clear the queue which now
         // has multiple VTX config packets in it
-        crsf.ResetMspQueue();
+        CRSF::ResetMspQueue();
     }
 
     return DURATION_NEVER;

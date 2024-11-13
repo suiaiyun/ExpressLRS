@@ -8,12 +8,18 @@
 extern TCPSOCKET wifi2tcp;
 #endif
 
+#if defined(HAS_MSP_VTX) && defined(TARGET_RX)
+#include "devMSPVTX.h"
+#endif
+
 #if defined(UNIT_TEST)
 #include <iostream>
 using namespace std;
 #endif
 
 #if CRSF_RX_MODULE
+
+#include "crsf2msp.h"
 
 Telemetry::Telemetry()
 {
@@ -48,6 +54,32 @@ bool Telemetry::ShouldSendDeviceFrame()
     return deviceFrame;
 }
 
+void Telemetry::SetCrsfBatterySensorDetected()
+{
+    crsfBatterySensorDetected = true;
+}
+
+void Telemetry::CheckCrsfBatterySensorDetected()
+{
+    if (CRSFinBuffer[CRSF_TELEMETRY_TYPE_INDEX] == CRSF_FRAMETYPE_BATTERY_SENSOR)
+    {
+        SetCrsfBatterySensorDetected();
+    }
+}
+
+void Telemetry::SetCrsfBaroSensorDetected()
+{
+    crsfBaroSensorDetected = true;
+}
+
+void Telemetry::CheckCrsfBaroSensorDetected()
+{
+    if (CRSFinBuffer[CRSF_TELEMETRY_TYPE_INDEX] == CRSF_FRAMETYPE_BARO_ALTITUDE ||
+        CRSFinBuffer[CRSF_TELEMETRY_TYPE_INDEX] == CRSF_FRAMETYPE_VARIO)
+    {
+        SetCrsfBaroSensorDetected();
+    }
+}
 
 PAYLOAD_DATA(GPS, BATTERY_SENSOR, ATTITUDE, DEVICE_INFO, FLIGHT_MODE, VARIO, BARO_ALTITUDE);
 
@@ -112,6 +144,7 @@ void Telemetry::ResetState()
     telemetry_state = TELEMETRY_IDLE;
     currentTelemetryByte = 0;
     currentPayloadIndex = 0;
+    twoslotLastQueueIndex = 0;
     receivedPackages = 0;
 
     uint8_t offset = 0;
@@ -135,7 +168,10 @@ bool Telemetry::RXhandleUARTin(uint8_t data)
 {
     switch(telemetry_state) {
         case TELEMETRY_IDLE:
-            if (data == CRSF_ADDRESS_CRSF_RECEIVER || data == CRSF_SYNC_BYTE)
+            // Telemetry from Betaflight/iNav starts with CRSF_SYNC_BYTE (CRSF_ADDRESS_FLIGHT_CONTROLLER)
+            // from a TX module it will be addressed to CRSF_ADDRESS_RADIO_TRANSMITTER (RX used as a relay)
+            // and things addressed to CRSF_ADDRESS_CRSF_RECEIVER I guess we should take too since that's us, but we'll just forward them
+            if (data == CRSF_SYNC_BYTE || data == CRSF_ADDRESS_RADIO_TRANSMITTER || data == CRSF_ADDRESS_CRSF_RECEIVER)
             {
                 currentTelemetryByte = 0;
                 telemetry_state = RECEIVING_LENGTH;
@@ -171,6 +207,12 @@ bool Telemetry::RXhandleUARTin(uint8_t data)
                 if (data == crc)
                 {
                     AppendTelemetryPackage(CRSFinBuffer);
+
+                    // Special case to check here and not in AppendTelemetryPackage(). devAnalogVbat and vario sends
+                    // direct to AppendTelemetryPackage() and we want to detect packets only received through serial.
+                    CheckCrsfBatterySensorDetected();
+                    CheckCrsfBaroSensorDetected();
+
                     receivedPackages++;
                     return true;
                 }
@@ -190,35 +232,60 @@ bool Telemetry::RXhandleUARTin(uint8_t data)
     return true;
 }
 
-bool Telemetry::AppendTelemetryPackage(uint8_t *package)
+/**
+ * @brief: Check the CRSF frame for commands that should not be passed on
+ * @return: true if packet was internal and should not be processed further
+*/
+bool Telemetry::processInternalTelemetryPackage(uint8_t *package)
 {
-    const crsf_header_t *header = (crsf_header_t *) package;
+    const crsf_ext_header_t *header = (crsf_ext_header_t *)package;
 
-    if (header->type == CRSF_FRAMETYPE_COMMAND && package[3] == 'b' && package[4] == 'l')
+    if (header->type == CRSF_FRAMETYPE_COMMAND)
     {
-        callBootloader = true;
-        return true;
+        // Non CRSF, dest=b src=l -> reboot to bootloader
+        if (package[3] == 'b' && package[4] == 'l')
+        {
+            callBootloader = true;
+            return true;
+        }
+        // 1. Non CRSF, dest=b src=b -> bind mode
+        // 2. CRSF bind command
+        if ((package[3] == 'b' && package[4] == 'd') ||
+            (header->frame_size >= 6 // official CRSF is 7 bytes with two CRCs
+            && header->dest_addr == CRSF_ADDRESS_CRSF_RECEIVER
+            && header->orig_addr == CRSF_ADDRESS_FLIGHT_CONTROLLER
+            && header->payload[0] == CRSF_COMMAND_SUBCMD_RX
+            && header->payload[1] == CRSF_COMMAND_SUBCMD_RX_BIND))
+        {
+            callEnterBind = true;
+            return true;
+        }
+        // Non CRSF, dest=b src=m -> set modelmatch
+        if (package[3] == 'm' && package[4] == 'm')
+        {
+            callUpdateModelMatch = true;
+            modelMatchId = package[5];
+            return true;
+        }
     }
-    if (header->type == CRSF_FRAMETYPE_COMMAND && package[3] == 'b' && package[4] == 'd')
-    {
-        callEnterBind = true;
-        return true;
-    }
-    if (header->type == CRSF_FRAMETYPE_COMMAND && package[3] == 'm' && package[4] == 'm')
-    {
-        callUpdateModelMatch = true;
-        modelMatchId = package[5];
-        return true;
-    }
-    if (header->type == CRSF_FRAMETYPE_DEVICE_PING && package[CRSF_TELEMETRY_TYPE_INDEX + 1] == CRSF_ADDRESS_CRSF_RECEIVER)
+
+    if (header->type == CRSF_FRAMETYPE_DEVICE_PING && header->dest_addr == CRSF_ADDRESS_CRSF_RECEIVER)
     {
         sendDeviceFrame = true;
         return true;
     }
 
+    return false;
+}
+
+bool Telemetry::AppendTelemetryPackage(uint8_t *package)
+{
+    if (processInternalTelemetryPackage(package))
+        return true;
+
+    const crsf_header_t *header = (crsf_header_t *) package;
     uint8_t targetIndex = 0;
     bool targetFound = false;
-
 
     if (header->type >= CRSF_FRAMETYPE_DEVICE_PING)
     {
@@ -247,27 +314,34 @@ bool Telemetry::AppendTelemetryPackage(uint8_t *package)
                 if (wifi2tcp.hasClient() && (header->type == CRSF_FRAMETYPE_MSP_RESP || header->type == CRSF_FRAMETYPE_MSP_REQ)) // if we have a client we probs wanna talk to it
                 {
                     DBGLN("Got MSP frame, forwarding to client, len: %d", currentTelemetryByte);
-                    CRSF::crsf2msp.parse(package);
+                    crsf2msp.parse(package);
                 }
                 else // if no TCP client we just want to forward MSP over the link
             #endif
             {
-                // larger msp resonses are sent in two chunks so special handling is needed so both get sent
+#if defined(HAS_MSP_VTX) && defined(TARGET_RX)
                 if (header->type == CRSF_FRAMETYPE_MSP_RESP)
                 {
-                    // there is already another response stored
-                    if (payloadTypes[targetIndex].updated)
-                    {
-                        // use other slot
-                        targetIndex = payloadTypesCount - 1;
-                    }
-
-                    // if both slots are taked do not overwrite other data since the first chunk would be lost
-                    if (payloadTypes[targetIndex].updated)
-                    {
-                        targetFound = false;
-                    }
+                    mspVtxProcessPacket(package);
                 }
+#endif
+                // This code is emulating a two slot FIFO with head dropping
+                if (currentPayloadIndex == payloadTypesCount - 2 && payloadTypes[currentPayloadIndex].locked)
+                {
+                    // Sending the first slot, use the second
+                    targetIndex = payloadTypesCount - 1;
+                }
+                else if (currentPayloadIndex == payloadTypesCount - 1 && payloadTypes[currentPayloadIndex].locked)
+                {
+                    // Sending the second slot, use the first
+                    targetIndex = payloadTypesCount - 2;
+                }
+                else if (twoslotLastQueueIndex == payloadTypesCount - 2 && payloadTypes[twoslotLastQueueIndex].updated)
+                {
+                    // Previous frame saved to the first slot, use the second
+                    targetIndex = payloadTypesCount - 1;
+                }
+                twoslotLastQueueIndex = targetIndex;
             }
         }
         else
@@ -282,7 +356,7 @@ bool Telemetry::AppendTelemetryPackage(uint8_t *package)
         {
             if (header->type == payloadTypes[i].type)
             {
-                if (!payloadTypes[i].locked && CRSF_FRAME_SIZE(package[CRSF_TELEMETRY_LENGTH_INDEX]) <= payloadTypes[i].size)
+                if (CRSF_FRAME_SIZE(package[CRSF_TELEMETRY_LENGTH_INDEX]) <= payloadTypes[i].size)
                 {
                     targetIndex = i;
                     targetFound = true;
@@ -298,7 +372,7 @@ bool Telemetry::AppendTelemetryPackage(uint8_t *package)
         }
     }
 
-    if (targetFound)
+    if (targetFound && !payloadTypes[targetIndex].locked)
     {
         memcpy(payloadTypes[targetIndex].data, package, CRSF_FRAME_SIZE(package[CRSF_TELEMETRY_LENGTH_INDEX]));
         payloadTypes[targetIndex].updated = true;

@@ -1,19 +1,14 @@
 #include <cstdint>
-#include <unity.h>
 #include <iostream>
+#include <unity.h>
 #include "../test_msp/mock_serial.h"
 
 #include "common.h"
-#include "devCRSF.h"
+#include "CRSF.h"
 
 using namespace std;
-// Mock out the serial port using a string stream
-std::string buf;
-StringStream ss(buf);
 
-// Create a CRSF object to test,
-// using the StringStream as a mock UART
-CRSF crsf(&ss);
+uint32_t ChannelData[CRSF_NUM_CHANNELS];      // Current state of channels, CRSF format
 
 GENERIC_CRC8 test_crc(CRSF_CRC_POLY);
 
@@ -47,8 +42,8 @@ void test_device_info(void)
     TEST_ASSERT_EQUAL(22, DEVICE_INFORMATION_PAYLOAD_LENGTH);
     TEST_ASSERT_EQUAL(28, DEVICE_INFORMATION_LENGTH);
 
-    crsf.GetDeviceInformation(deviceInformation, 0);
-    crsf.SetExtendedHeaderAndCrc(deviceInformation, CRSF_FRAMETYPE_DEVICE_INFO, DEVICE_INFORMATION_FRAME_SIZE, CRSF_ADDRESS_CRSF_RECEIVER, CRSF_ADDRESS_FLIGHT_CONTROLLER);
+    CRSF::GetDeviceInformation(deviceInformation, 0);
+    CRSF::SetExtendedHeaderAndCrc(deviceInformation, CRSF_FRAMETYPE_DEVICE_INFO, DEVICE_INFORMATION_FRAME_SIZE, CRSF_ADDRESS_CRSF_RECEIVER, CRSF_ADDRESS_FLIGHT_CONTROLLER);
 
     crsf_ext_header_t *header = (crsf_ext_header_t *) deviceInformation;
 

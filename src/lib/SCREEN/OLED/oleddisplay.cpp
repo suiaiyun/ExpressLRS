@@ -8,6 +8,7 @@
 #include "options.h"
 #include "logging.h"
 #include "common.h"
+#include "CRSF.h"
 
 #if defined(PLATFORM_ESP32)
 #include "WiFi.h"
@@ -117,10 +118,29 @@ void OLEDDisplay::displaySplashScreen()
 #else
 #ifdef USE_OLED_SPI_SMALL
     if (OPT_USE_OLED_SPI_SMALL)
-        u8g2->drawXBM(48, 0, 32, 32, elrs32);
+    {
+        auto constexpr sz = 128 * 32 / 8;
+        uint8_t image[sz];
+        if (spi_flash_read(logo_image, image, sz) == ESP_OK)
+        {
+            u8g2->drawXBM(0, 0, 128, 32, image);
+        }
+    }
     else
 #endif
-        u8g2->drawXBM(32, 0, 64, 64, elrs64);
+    {
+        auto constexpr sz = 128 * 64 / 8;
+        uint8_t image[sz];
+        if (spi_flash_read(logo_image, image, sz) == ESP_OK)
+        {
+            u8g2->drawXBM(0, 0, 128, 64, image);
+        }
+
+        char buffer[50];
+        snprintf(buffer, sizeof(buffer), "ELRS-%.6s", version);
+        u8g2->setFont(u8g2_font_profont10_mr);
+        drawCentered(60, buffer);
+    }
 #endif
     u8g2->sendBuffer();
 }
@@ -377,11 +397,66 @@ void OLEDDisplay::displaySending()
     u8g2->sendBuffer();
 }
 
+void OLEDDisplay::displayLinkstats()
+{
+    constexpr int16_t LINKSTATS_COL_FIRST   = 0;
+    constexpr int16_t LINKSTATS_COL_SECOND  = 32;
+    constexpr int16_t LINKSTATS_COL_THIRD   = 85;
+
+    constexpr int16_t LINKSTATS_ROW_FIRST   = 10;
+    constexpr int16_t LINKSTATS_ROW_SECOND  = 20;
+    constexpr int16_t LINKSTATS_ROW_THIRD   = 30;
+    constexpr int16_t LINKSTATS_ROW_FOURTH  = 40;
+    constexpr int16_t LINKSTATS_ROW_FIFTH   = 50;
+
+    u8g2->clearBuffer();
+    u8g2->setFont(u8g2_font_profont10_mr);
+
+    u8g2->drawStr(LINKSTATS_COL_FIRST, LINKSTATS_ROW_SECOND, "LQ");
+    u8g2->drawStr(LINKSTATS_COL_FIRST, LINKSTATS_ROW_THIRD, "RSSI");
+    u8g2->drawStr(LINKSTATS_COL_FIRST, LINKSTATS_ROW_FOURTH, "SNR");
+    u8g2->drawStr(LINKSTATS_COL_FIRST, LINKSTATS_ROW_FIFTH, "Ant");
+
+    u8g2->drawStr(LINKSTATS_COL_SECOND, LINKSTATS_ROW_FIRST, "Uplink");
+    u8g2->setCursor(LINKSTATS_COL_SECOND, LINKSTATS_ROW_SECOND);
+    u8g2->print(CRSF::LinkStatistics.uplink_Link_quality);
+    u8g2->setCursor(LINKSTATS_COL_SECOND, LINKSTATS_ROW_THIRD);
+    u8g2->print((int8_t)CRSF::LinkStatistics.uplink_RSSI_1);
+    if (CRSF::LinkStatistics.uplink_RSSI_2 != 0)
+    {
+        u8g2->print('/');
+        u8g2->print((int8_t)CRSF::LinkStatistics.uplink_RSSI_2);
+    }
+
+    u8g2->drawStr(LINKSTATS_COL_THIRD, LINKSTATS_ROW_FIRST, "Downlink");
+    u8g2->setCursor(LINKSTATS_COL_THIRD, LINKSTATS_ROW_SECOND);
+    u8g2->print(CRSF::LinkStatistics.downlink_Link_quality);
+    u8g2->setCursor(LINKSTATS_COL_THIRD, LINKSTATS_ROW_THIRD);
+    u8g2->print((int8_t)CRSF::LinkStatistics.downlink_RSSI_1);
+    if (isDualRadio())
+    {
+        u8g2->print('/');
+        u8g2->print((int8_t)CRSF::LinkStatistics.downlink_RSSI_2);
+    }
+
+    if (!OPT_USE_OLED_SPI_SMALL)
+    {
+        u8g2->setCursor(LINKSTATS_COL_SECOND, LINKSTATS_ROW_FOURTH);
+        u8g2->print((int8_t)CRSF::LinkStatistics.uplink_SNR);
+        u8g2->setCursor(LINKSTATS_COL_THIRD, LINKSTATS_ROW_FOURTH);
+        u8g2->print((int8_t)CRSF::LinkStatistics.downlink_SNR);
+        u8g2->setCursor(LINKSTATS_COL_SECOND, LINKSTATS_ROW_FIFTH);
+        u8g2->print(CRSF::LinkStatistics.active_antenna);
+    }
+
+    u8g2->sendBuffer();
+}
+
 // helpers
 static void helperDrawImage(menu_item_t menu)
 {
     if (OPT_USE_OLED_SPI_SMALL)
-   {
+    {
 
         // Adjust these to move them around on the screen
         int x_pos = 65;
@@ -390,6 +465,12 @@ static void helperDrawImage(menu_item_t menu)
         switch(menu){
             case STATE_PACKET:
                 u8g2->drawXBM(x_pos, y_pos, 32, 22, rate_img32);
+                break;
+            case STATE_SWITCH:
+                u8g2->drawXBM(x_pos, y_pos, 32, 32, switch_img32);
+                break;
+            case STATE_ANTENNA:
+                u8g2->drawXBM(x_pos, y_pos, 32, 32, antenna_img32);
                 break;
             case STATE_POWER:
             case STATE_POWER_MAX:
@@ -449,6 +530,12 @@ static void helperDrawImage(menu_item_t menu)
         switch(menu){
             case STATE_PACKET:
                 u8g2->drawXBM(x_pos, y_pos, 64, 44, rate_img64);
+                break;
+            case STATE_SWITCH:
+                u8g2->drawXBM(x_pos, y_pos, 64, 64, switch_img64);
+                break;
+            case STATE_ANTENNA:
+                u8g2->drawXBM(x_pos, y_pos, 64, 64, antenna_img64);
                 break;
             case STATE_POWER:
             case STATE_POWER_MAX:

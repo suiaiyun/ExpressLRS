@@ -1,6 +1,6 @@
-@@require(PLATFORM, VERSION, isTX, sx127x)
+@@require(PLATFORM, VERSION, isTX)
 <!DOCTYPE HTML>
-<html>
+<html lang="en">
 
 <head>
 	<title>Welcome to your ExpressLRS System</title>
@@ -69,16 +69,14 @@ td img.icon-pwm {
 			You can <a download href="/hardware.json">download</a> the configuration or <a href="/reset?hardware">reset</a> to pre-configured defaults and reboot.
 		</div>
 		<div class="mui-panel">
-			<form id="notused" action="" method="POST" enctype="multipart/form-data">
-				<fieldset>
-					<input type="hidden" id="MAX_FILE_SIZE" name="MAX_FILE_SIZE" value="10000" />
-					<div>
-						<label for="fileselect">Load target configuration (remember to press "Save Target Configuration" below):</label>
-						<input type="file" id="fileselect" name="fileselect[]" />
-						<div id="filedrag">or drop files here</div>
-					</div>
-				</fieldset>
-			</form>
+			<label>Upload target configuration (remember to press "Save Target Configuration" below):</label>
+			<button class="mui-btn mui-btn--small mui-btn--primary upload">
+				<label>
+					Upload
+					<input type="file" id="fileselect" name="fileselect[]" />
+				</label>
+			</button>
+			<div id="filedrag">or drop files here</div>
 		</div>
 		<div class="mui-panel">
 			<form id='upload_hardware' method='POST' action="/hardware">
@@ -87,6 +85,10 @@ td img.icon-pwm {
 					<tr><td colspan='2'><b>CRSF Serial Pins</td></tr>
 					<tr><td width="30"></td><td>RX pin<img class="icon-input"/></td><td><input size='3' id='serial_rx' name='serial_rx' type='text'/></td><td>Pin used to receive CRSF signal from the handset</td></tr>
 					<tr><td></td><td>TX pin<img class="icon-output"/></td><td><input size='3' id='serial_tx' name='serial_tx' type='text'/></td><td>Pin used to transmit CRSF telemetry to the handset (may be the same as the RX PIN)</td></tr>
+
+					<tr><td colspan='2'><b>Serial2 Pins</td></tr>
+					<tr><td width="30"></td><td>RX pin<img class="icon-input"/></td><td><input size='3' id='serial1_rx' name='serial1_rx' type='text'/></td><td>Serial2 RX - ESP32 targets only</td></tr>
+					<tr><td></td><td>TX pin<img class="icon-output"/></td><td><input size='3' id='serial1_tx' name='serial1_tx' type='text'/></td><td>Serial2 TX - ESP32 targets only</td></tr>
 
 					<tr><td colspan='2'><b>Radio Chip Pins & Options</td></tr>
 					<tr><td></td><td>BUSY pin<img class="icon-input"/></td><td><input size='3' id='radio_busy' name='radio_busy' type='text'/></td><td>GPIO Input connected to SX128x busy pin</td></tr>
@@ -99,10 +101,13 @@ td img.icon-pwm {
 					<tr><td></td><td>RST pin<img class="icon-output"/></td><td><input size='3' id='radio_rst' name='radio_rst' type='text'/></td><td>Reset pin connected to (possibly) multiple SX1280/127x</td></tr>
 					<tr><td></td><td>SCK pin<img class="icon-output"/></td><td><input size='3' id='radio_sck' name='radio_sck' type='text'/></td><td>Clock pin connected to (possibly) multiple SX1280/127x</td></tr>
 					<tr><td></td><td>BUSY_2 pin<img class="icon-input"/></td><td><input size='3' id='radio_busy_2' name='radio_busy_2' type='text'/></td><td>Busy pin for second SX1280</td></tr>
+					<tr><td></td><td>DIO0_2 pin<img class="icon-input"/></td><td><input size='3' id='radio_dio0_2' name='radio_dio0_2' type='text'/></td><td>Interrupt pin for second SX127x</td></tr>
 					<tr><td></td><td>DIO1_2 pin<img class="icon-input"/></td><td><input size='3' id='radio_dio1_2' name='radio_dio1_2' type='text'/></td><td>Interrupt pin for second SX1280</td></tr>
 					<tr><td></td><td>NSS_2 pin<img class="icon-output"/></td><td><input size='3' id='radio_nss_2' name='radio_nss_2' type='text'/></td><td>Chip select pin for second SX1280</td></tr>
+					<tr><td></td><td>RST_2 pin<img class="icon-output"/></td><td><input size='3' id='radio_rst_2' name='radio_rst_2' type='text'/></td><td>Reset pin connected to second SX1280/127x</td></tr>
 					<tr><td></td><td>DCDC enabled</td><td><input size='3' id='radio_dcdc' name='radio_dcdc' type='checkbox'/></td><td>Use the SX1280 DC-DC converter rather than LDO voltage regulator (15uH inductor must be present)</td></tr>
 					<tr><td></td><td>RFO_HF enabled</td><td><input size='3' id='radio_rfo_hf' name='radio_rfo_hf' type='checkbox'/></td><td>SX127x PA to use, either the RFO_HF or PA_BOOST (depends on circuit design)</td></tr>
+					<tr><td></td><td>LR1121 RF Switch Controls</td><td><input size='40' id='radio_rfsw_ctrl' name='radio_rfsw_ctrl' type='text' class='array'/></td><td>Comma-separated list of 8 values used for setting the LR1121 RF switch controls</td></tr>
 
 					<tr><td colspan='2'><b>Radio Antenna</td></tr>
 					<tr><td></td><td>CTRL pin<img class="icon-output"/></td><td><input size='3' id='ant_ctrl' name='ant_ctrl' type='text'/></td><td>Pin connected to Antenna select pin on power amplifier</td></tr>
@@ -110,8 +115,8 @@ td img.icon-pwm {
 
 					<tr><td colspan='2'><b>Radio Power</td></tr>
 					<tr><td></td><td>PA enable pin<img class="icon-output"/></td><td><input size='3' id='power_enable' name='power_enable' type='text'/></td><td>Enable the power amplifier (active high)</td></tr>
-					<!-- <tr><td></td><td>APC1 pin<img class="icon-output"/></td><td><input size='3' id='power_apc1' name='power_apc1' type='text'/></td></tr> -->
-					<!-- <tr><td></td><td>APC2 pin<img class="icon-output"/></td><td><input size='3' id='power_apc2' name='power_apc2' type='text'/></td></tr> -->
+					<tr><td></td><td>APC1 pin<img class="icon-output"/></td><td><input size='3' id='power_apc1' name='power_apc1' type='text'/></td><td>Power amplifier control voltage</td></tr>
+					<tr><td></td><td>APC2 pin<img class="icon-output"/></td><td><input size='3' id='power_apc2' name='power_apc2' type='text'/></td><td>Power amplifier control voltage</td></tr>
 					<tr><td></td><td>RXEN pin<img class="icon-output"/></td><td><input size='3' id='power_rxen' name='power_rxen' type='text'/></td><td>Enable RX mode LNA (active high)</td></tr>
 					<tr><td></td><td>TXEN pin<img class="icon-output"/></td><td><input size='3' id='power_txen' name='power_txen' type='text'/></td><td>Enable TX mode PA (active high)</td></tr>
 					<tr><td></td><td>RXEN_2 pin<img class="icon-output"/></td><td><input size='3' id='power_rxen_2' name='power_rxen_2' type='text'/></td><td>Enable RX mode LNA on second SX1280 (active high)</td></tr>
@@ -172,7 +177,10 @@ td img.icon-pwm {
 							<option value='3'>via ESP DACWRITE</option>
 						</select>
 					</td><td>How the power level is set</td></tr>
-					<tr><td></td><td>Level Value(s)</td><td><input size='40' id='power_values' name='power_values' type='text' class='array'/></td><td>Comma-separated list of values that set the power output</td></tr>
+					<tr><td></td><td>Power Value(s)</td><td><input size='40' id='power_values' name='power_values' type='text' class='array'/></td><td>Comma-separated list of values that set the power output (if using a DAC these are the DAC values)</td></tr>
+					<tr><td></td><td>Secondary Power Value(s)</td><td><input size='40' id='power_values2' name='power_values2' type='text' class='array'/></td><td>Comma-separated list of values that set the power output (if using a DAC then these set the Semtech power output)</td></tr>
+					<tr><td></td><td>Dual Power Value(s)</td><td><input size='40' id='power_values_dual' name='power_values_dual' type='text' class='array'/></td><td>Comma-separated list of values that set the higher frequency power output of a dual band Tx/Rx</td></tr>
+					<tr><td></td><td>PA LNA Gain</td><td><input size='20' id='power_lna_gain' name='power_lna_gain' type='text'/></td><td>The amount of dB gain provided by the LNA</td></tr>
 
 					<tr><td colspan='2'><b>Radio Power Detection</td></tr>
 					<tr><td></td><td>PDET pin<img class="icon-analog"/></td><td><input size='3' id='power_pdet' name='power_pdet' type='text'/></td><td>Analog input (up to 1.1V) connected to 'power detect' pin on PA for adjustment of the power output</td></tr>
@@ -261,6 +269,19 @@ td img.icon-pwm {
 					<tr><td></td><td>VBat pin<img class="icon-analog"/></td><td><input size='3' id='vbat' name='vbat' type='text'/></td><td>Analog input pin for reading VBAT voltage (1V max on 8285, 3.3V max on ESP32)</td></tr>
 					<tr><td></td><td>VBat offset</td><td><input size='7' id='vbat_offset' name='vbat_offset' type='text'/></td><td>Offset and scale are used together with the analog pin to calculate the voltage</td></tr>
 					<tr><td></td><td>VBat scale</td><td><input size='7' id='vbat_scale' name='vbat_scale' type='text'/></td><td>voltage = (analog - offset) / scale</td></tr>
+					<tr><td></td><td>VBat attenuation</td><td>
+						<select id='vbat_atten' name='vbat_atten'>
+							<option value='-1'>Default</option>
+							<option value='0'>0 dB</option>
+							<option value='1'>2.5 dB</option>
+							<option value='2'>6 dB</option>
+							<option value='3'>11 dB</option>
+							<option value='4'>0 dB + calibration</option>
+							<option value='5'>2.5 dB + calibration</option>
+							<option value='6'>6 dB + calibration</option>
+							<option value='7'>11 dB + calibration</option>
+						</select>
+					</td><td>ADC pin attenuation (ESP32) and optional efuse-based calibration adjustment</td></tr>
 
 					<tr><td colspan='2'><b>SPI VTX</td></tr>
 					<tr><td></td><td>RF amp PWM pin<img class="icon-pwm"/></td><td><input size='3' id='vtx_amp_pwm' name='vtx_amp_pwm' type='text'/></td><td>Set the power output level of the VTX PA (value is calculated based on power and frequency using VPD interpolation values)</td></tr>
@@ -272,6 +293,8 @@ td img.icon-pwm {
 					<tr><td></td><td>SPI MOSI pin<img class="icon-output"/></td><td><input size='3' id='vtx_mosi' name='vtx_mosi' type='text'/></td><td>MOSI pin on RTC6705 VTx (leave undefined if sharing Radio SPI bus)</td></tr>
 					<tr><td></td><td>25mW VPD interpolation values</td><td><input size='40' id='vtx_amp_vpd_25mW' name='vtx_amp_vpd_25mW' type='text' class='array'/></td><td>4 values for 5650, 5750, 5850, 5950 frequencies at 25mW</td></tr>
 					<tr><td></td><td>100mW VPD interpolation values</td><td><input size='40' id='vtx_amp_vpd_100mW' name='vtx_amp_vpd_100mW' type='text' class='array'/></td><td>4 values for 5650, 5750, 5850, 5950 frequencies at 100mW</td></tr>
+					<tr><td></td><td>25mW PWM interpolation values</td><td><input size='40' id='vtx_amp_pwm_25mW' name='vtx_amp_pwm_25mW' type='text' class='array'/></td><td>4 values for 5650, 5750, 5850, 5950 frequencies at 25mW</td></tr>
+					<tr><td></td><td>100mW PWM interpolation values</td><td><input size='40' id='vtx_amp_pwm_100mW' name='vtx_amp_pwm_100mW' type='text' class='array'/></td><td>4 values for 5650, 5750, 5850, 5950 frequencies at 100mW</td></tr>
 
 					<tr><td colspan='2'><b>I2C</td></tr>
 					<tr><td></td><td>SCL pin<img class="icon-output"/></td><td><input size='3' id='i2c_scl' name='i2c_scl' type='text'/></td><td>I2C clock pin used to communicate with I2C devices</td></tr>

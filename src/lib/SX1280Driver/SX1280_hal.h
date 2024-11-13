@@ -38,8 +38,6 @@ public:
     void end();
     void reset();
 
-    void ICACHE_RAM_ATTR setNss(uint8_t radioNumber, bool state);
-
     void ICACHE_RAM_ATTR WriteCommand(SX1280_RadioCommands_t command, uint8_t val, SX12XX_Radio_Number_t radioNumber, uint32_t busyDelay = 15);
     void ICACHE_RAM_ATTR WriteCommand(SX1280_RadioCommands_t opcode, uint8_t *buffer, uint8_t size, SX12XX_Radio_Number_t radioNumber, uint32_t busyDelay = 15);
     void ICACHE_RAM_ATTR WriteRegister(uint16_t address, uint8_t *buffer, uint8_t size, SX12XX_Radio_Number_t radioNumber);
@@ -53,10 +51,6 @@ public:
     void ICACHE_RAM_ATTR ReadBuffer(uint8_t offset, uint8_t *buffer, uint8_t size, SX12XX_Radio_Number_t radioNumber);
 
     bool ICACHE_RAM_ATTR WaitOnBusy(SX12XX_Radio_Number_t radioNumber);
-
-    void ICACHE_RAM_ATTR TXenable(SX12XX_Radio_Number_t radioNumber);
-    void ICACHE_RAM_ATTR RXenable();
-    void ICACHE_RAM_ATTR TXRXdisable();
 
     static ICACHE_RAM_ATTR void dioISR_1();
     static ICACHE_RAM_ATTR void dioISR_2();
@@ -75,19 +69,5 @@ public:
     }
 
 private:
-#if defined(PLATFORM_ESP32)
-    uint64_t txrx_disable_clr_bits;
-    uint64_t tx1_enable_set_bits;
-    uint64_t tx1_enable_clr_bits;
-    uint64_t tx2_enable_set_bits;
-    uint64_t tx2_enable_clr_bits;
-    uint64_t tx_all_enable_set_bits;
-    uint64_t tx_all_enable_clr_bits;
-    uint64_t rx_enable_set_bits;
-    uint64_t rx_enable_clr_bits;
-#else
-    bool rx_enabled;
-    bool tx1_enabled;
-    bool tx2_enabled;
-#endif
+
 };

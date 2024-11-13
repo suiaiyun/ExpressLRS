@@ -11,6 +11,7 @@
 /////////////////////////
 
 #define WORD_ALIGNED_ATTR __attribute__((aligned(4)))
+#define WORD_PADDED(size) (((size)+3) & ~3)
 
 #ifdef PLATFORM_STM32
 /* ICACHE_RAM_ATTR1 is always linked into RAM */
@@ -49,6 +50,7 @@
 #if defined(GPIO_PIN_SPI_VTX_NSS)
 #if !defined(HAS_VTX_SPI)
 #define HAS_VTX_SPI
+#define HAS_MSP_VTX
 #define OPT_HAS_VTX_SPI true
 #endif
 #else
@@ -63,6 +65,7 @@
 
 #ifndef HAS_THERMAL
 #define OPT_HAS_THERMAL false
+#define OPT_HAS_THERMAL_LM75A false
 #elif !defined(OPT_HAS_THERMAL)
 #define OPT_HAS_THERMAL true
 #endif
@@ -92,6 +95,9 @@
 #ifndef GPIO_PIN_RST
 #define GPIO_PIN_RST UNDEF_PIN
 #endif
+#ifndef GPIO_PIN_RST_2
+#define GPIO_PIN_RST_2 UNDEF_PIN
+#endif
 #ifndef GPIO_PIN_BUSY
 #define GPIO_PIN_BUSY UNDEF_PIN
 #endif
@@ -100,6 +106,9 @@
 #endif
 #ifndef GPIO_PIN_DIO0
 #define GPIO_PIN_DIO0 UNDEF_PIN
+#endif
+#ifndef GPIO_PIN_DIO0_2
+#define GPIO_PIN_DIO0_2 UNDEF_PIN
 #endif
 #ifndef GPIO_PIN_DIO1
 #define GPIO_PIN_DIO1 UNDEF_PIN
@@ -198,6 +207,13 @@
 #ifndef GPIO_PIN_DEBUG_TX
 #define GPIO_PIN_DEBUG_TX       1
 #endif
+#elif defined(PLATFORM_ESP8266)
+#ifndef GPIO_PIN_DEBUG_RX
+#define GPIO_PIN_DEBUG_RX       UNDEF_PIN
+#endif
+#ifndef GPIO_PIN_DEBUG_TX
+#define GPIO_PIN_DEBUG_TX       UNDEF_PIN
+#endif
 #endif
 #if !defined(TARGET_UNIFIED_TX)
 #if defined(DEBUG_LOG) || defined(DEBUG_LOG_VERBOSE) || defined(USE_TX_BACKPACK)
@@ -226,14 +242,19 @@
 #endif
 #endif
 
-#if defined(TARGET_UNIFIED_RX)
-#define OPT_CRSF_RCVR_NO_SERIAL (GPIO_PIN_RCSIGNAL_RX == UNDEF_PIN && GPIO_PIN_RCSIGNAL_RX == UNDEF_PIN)
-#else
-#if defined(CRSF_RCVR_NO_SERIAL)
+// Using these DEBUG_* imply that no SerialIO will be used so the output is readable
+#if !defined(DEBUG_CRSF_NO_OUTPUT) && defined(TARGET_RX) && (defined(DEBUG_RCVR_LINKSTATS) || defined(DEBUG_RX_SCOREBOARD) || defined(DEBUG_RCVR_SIGNAL_STATS))
+#define DEBUG_CRSF_NO_OUTPUT
+#endif
+
+#if defined(DEBUG_CRSF_NO_OUTPUT)
 #define OPT_CRSF_RCVR_NO_SERIAL true
+#elif defined(TARGET_UNIFIED_RX)
+extern bool pwmSerialDefined;
+
+#define OPT_CRSF_RCVR_NO_SERIAL (GPIO_PIN_RCSIGNAL_RX == UNDEF_PIN && GPIO_PIN_RCSIGNAL_TX == UNDEF_PIN && !pwmSerialDefined)
 #else
 #define OPT_CRSF_RCVR_NO_SERIAL false
-#endif
 #endif
 
 #if defined(USE_ANALOG_VBAT) && !defined(GPIO_ANALOG_VBAT)
@@ -252,18 +273,27 @@
 #undef Regulatory_Domain_FCC_915
 #undef Regulatory_Domain_AU_433
 #undef Regulatory_Domain_EU_433
+#undef Regulatory_Domain_US_433
+#undef Regulatory_Domain_US_433_WIDE
 
-#elif defined(RADIO_SX127X)
+#elif defined(RADIO_SX127X) || defined(RADIO_LR1121)
 #if !(defined(Regulatory_Domain_AU_915) || defined(Regulatory_Domain_FCC_915) || \
         defined(Regulatory_Domain_EU_868) || defined(Regulatory_Domain_IN_866) || \
         defined(Regulatory_Domain_AU_433) || defined(Regulatory_Domain_EU_433) || \
+        defined(Regulatory_Domain_US_433) || defined(Regulatory_Domain_US_433_WIDE) || \
         defined(UNIT_TEST))
 #error "Regulatory_Domain is not defined for 900MHz device. Check user_defines.txt!"
 #endif
 #else
-#error "Either RADIO_SX127X or RADIO_SX128X must be defined!"
+#error "Either RADIO_SX127X, RADIO_LR1121 or RADIO_SX128X must be defined!"
 #endif
 
 #if defined(TARGET_UNIFIED_TX) || defined(TARGET_UNIFIED_RX)
+#if !defined(U0RXD_GPIO_NUM)
+#define U0RXD_GPIO_NUM (3)
+#endif
+#if !defined(U0TXD_GPIO_NUM)
+#define U0TXD_GPIO_NUM (1)
+#endif
 #include "hardware.h"
 #endif

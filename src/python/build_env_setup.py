@@ -1,10 +1,12 @@
 Import("env", "projenv")
 import os
+import shutil
 import stlink
 import UARTupload
 import opentx
 import upload_via_esp8266_backpack
 import esp_compress
+import elrs_helpers
 import BFinitPassthrough
 import ETXinitPassthrough
 import UnifiedConfiguration
@@ -107,12 +109,18 @@ elif platform in ['espressif32']:
         env.Replace(UPLOADER="$PROJECT_DIR/python/external/esptool/esptool.py")
         env.AddPreAction("upload", ETXinitPassthrough.init_passthrough)
     elif "_BETAFLIGHTPASSTHROUGH" in target_name:
+        if "ESP32S3" in target_name:
+            chip = "esp32-s3"
+        elif "ESP32C3" in target_name:
+            chip = "esp32-c3"
+        else:
+            chip = "esp32"
         env.Replace(
             UPLOADER="$PROJECT_DIR/python/external/esptool/esptool.py",
             UPLOAD_SPEED=420000,
             UPLOADERFLAGS=[
                 "--passthrough", "-b", "$UPLOAD_SPEED", "-p", "$UPLOAD_PORT",
-                "-c", "esp32", "--before", "no_reset", "--after", "hard_reset", "write_flash"
+                "-c", chip, "--before", "no_reset", "--after", "hard_reset", "write_flash"
             ]
         )
         env.AddPreAction("upload", BFinitPassthrough.init_passthrough)
@@ -135,3 +143,14 @@ except FileNotFoundError:
 env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", UnifiedConfiguration.appendConfiguration)
 if platform in ['espressif8266'] and "_WIFI" in target_name:
     env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", esp_compress.compressFirmware)
+
+def copyBootApp0bin(source, target, env):
+    file = os.path.join(env.PioPlatform().get_package_dir("framework-arduinoespressif32"), "tools", "partitions", "boot_app0.bin")
+    shutil.copy2(file, os.path.join(env['PROJECT_BUILD_DIR'], env['PIOENV']))
+
+if platform in ['espressif32']:
+    env.AddPreAction("$BUILD_DIR/${PROGNAME}.bin", copyBootApp0bin)
+
+if platform in ['espressif32', 'espressif8266']:
+    if not os.path.exists('hardware'):
+        elrs_helpers.git_cmd('clone', 'https://github.com/ExpressLRS/targets', 'hardware')

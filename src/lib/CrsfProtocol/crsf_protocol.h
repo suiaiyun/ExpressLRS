@@ -5,10 +5,6 @@
 #include "crc.h"
 #include "options.h"
 
-#if TARGET_TX && PLATFORM_STM32
-#define CRSF_TX_MODULE_STM32 1
-#endif
-
 #if TARGET_TX
 #define CRSF_TX_MODULE 1
 #elif TARGET_RX || defined(UNIT_TEST)
@@ -26,7 +22,6 @@
 
 #define CRSF_CRC_POLY 0xd5
 
-#define CRSF_NUM_CHANNELS 16
 #define CRSF_CHANNEL_VALUE_MIN  172 // 987us - actual CRSF min is 0 with E.Limits on
 #define CRSF_CHANNEL_VALUE_1000 191
 #define CRSF_CHANNEL_VALUE_MID  992
@@ -35,12 +30,6 @@
 #define CRSF_MAX_PACKET_LEN 64
 
 #define CRSF_SYNC_BYTE 0xC8
-
-#define RCframeLength 22             // length of the RC data packed bytes frame. 16 channels in 11 bits each.
-#define LinkStatisticsFrameLength 10 //
-#define OpenTXsyncFrameLength 11     //
-#define BattSensorFrameLength 8      //
-#define VTXcontrolFrameLength 12     //
 
 #define CRSF_PAYLOAD_SIZE_MAX 62
 #define CRSF_FRAME_NOT_COUNTED_BYTES 2
@@ -57,26 +46,13 @@
 #define CRSF_TELEMETRY_CRC_LENGTH 1
 #define CRSF_TELEMETRY_TOTAL_SIZE(x) (x + CRSF_FRAME_LENGTH_EXT_TYPE_CRC)
 
-#define AUX1 4
-#define AUX2 5
-#define AUX3 6
-#define AUX4 7
-#define AUX5 8
-#define AUX6 9
-#define AUX7 10
-#define AUX8 11
-#define AUX9 12
-#define AUX10 13
-#define AUX11 14
-#define AUX12 15
-
 //////////////////////////////////////////////////////////////
 
 #define CRSF_MSP_REQ_PAYLOAD_SIZE 8
 #define CRSF_MSP_RESP_PAYLOAD_SIZE 58
 #define CRSF_MSP_MAX_PAYLOAD_SIZE (CRSF_MSP_REQ_PAYLOAD_SIZE > CRSF_MSP_RESP_PAYLOAD_SIZE ? CRSF_MSP_REQ_PAYLOAD_SIZE : CRSF_MSP_RESP_PAYLOAD_SIZE)
 
-typedef enum
+typedef enum : uint8_t
 {
     CRSF_FRAMETYPE_GPS = 0x02,
     CRSF_FRAMETYPE_VARIO = 0x07,
@@ -109,12 +85,13 @@ typedef enum
     CRSF_FRAMETYPE_ARDUPILOT_RESP = 0x80,
 } crsf_frame_type_e;
 
-typedef enum {
-    SUBCOMMAND_CRSF = 0x10
+typedef enum : uint8_t {
+    CRSF_COMMAND_SUBCMD_RX = 0x10
 } crsf_command_e;
 
-typedef enum {
-    COMMAND_MODEL_SELECT_ID = 0x05
+typedef enum : uint8_t {
+    CRSF_COMMAND_SUBCMD_RX_BIND = 0x01,
+    CRSF_COMMAND_MODEL_SELECT_ID = 0x05
 } crsf_subcommand_e;
 
 enum {
@@ -134,7 +111,7 @@ enum {
     CRSF_FRAME_GENERAL_RESP_PAYLOAD_SIZE = CRSF_EXT_FRAME_SIZE(CRSF_FRAME_TX_MSP_FRAME_SIZE)
 };
 
-typedef enum
+typedef enum : uint8_t
 {
     CRSF_ADDRESS_BROADCAST = 0x00,
     CRSF_ADDRESS_USB = 0x10,
@@ -154,7 +131,7 @@ typedef enum
 
 //typedef struct crsf_addr_e asas;
 
-typedef enum
+typedef enum : uint8_t
 {
     CRSF_UINT8 = 0,
     CRSF_INT8 = 1,
@@ -186,7 +163,7 @@ typedef struct crsf_header_s
 {
     uint8_t device_addr; // from crsf_addr_e
     uint8_t frame_size;  // counts size after this byte, so it must be the payload size + 2 (type and crc)
-    uint8_t type;        // from crsf_frame_type_e
+    crsf_frame_type_e type;
 } PACKED crsf_header_t;
 
 #define CRSF_MK_FRAME_T(payload) struct payload##_frame_s { crsf_header_t h; payload p; uint8_t crc; } PACKED
@@ -197,10 +174,11 @@ typedef struct crsf_ext_header_s
     // Common header fields, see crsf_header_t
     uint8_t device_addr;
     uint8_t frame_size;
-    uint8_t type;
+    crsf_frame_type_e type;
     // Extended fields
-    uint8_t dest_addr;
-    uint8_t orig_addr;
+    crsf_addr_e dest_addr;
+    crsf_addr_e orig_addr;
+    uint8_t payload[0];
 } PACKED crsf_ext_header_t;
 
 /**
@@ -249,6 +227,50 @@ typedef struct deviceInformationPacket_s
 #define DEVICE_INFORMATION_LENGTH (sizeof(crsf_ext_header_t) + DEVICE_INFORMATION_PAYLOAD_LENGTH + CRSF_FRAME_CRC_SIZE)
 #define DEVICE_INFORMATION_FRAME_SIZE (DEVICE_INFORMATION_PAYLOAD_LENGTH + CRSF_FRAME_LENGTH_EXT_TYPE_CRC)
 
+// https://github.com/betaflight/betaflight/blob/master/src/main/msp/msp.c#L1949
+typedef struct mspVtxConfigPacket_s
+{
+    uint8_t vtxType;
+    uint8_t band;
+    uint8_t channel;
+    uint8_t power;
+    uint8_t pitmode;
+    uint16_t freq;
+    uint8_t deviceIsReady;
+    uint8_t lowPowerDisarm;
+    uint16_t pitModeFreq;
+    uint8_t vtxTableAvailable;
+    uint8_t bands;
+    uint8_t channels;
+    uint8_t powerLevels;
+} PACKED mspVtxConfigPacket_t;
+
+typedef struct mspVtxPowerLevelPacket_s
+{
+    uint8_t powerLevel;
+    uint16_t powerValue;
+    uint8_t powerLabelLength;
+    uint8_t label[3];
+} PACKED mspVtxPowerLevelPacket_t;
+
+typedef struct mspVtxBandPacket_s
+{
+    uint8_t band;
+    uint8_t bandNameLength;
+    uint8_t bandName[8];
+    uint8_t bandLetter;
+    uint8_t isFactoryBand;
+    uint8_t channels;
+    uint16_t channel[8];
+} PACKED mspVtxBandPacket_t;
+
+#define MSP_REQUEST_PAYLOAD_LENGTH(len) 7 + len // status + flags + 2 function + 2 length + crc + payload
+#define MSP_REQUEST_LENGTH(len) (sizeof(crsf_ext_header_t) + MSP_REQUEST_PAYLOAD_LENGTH(len) + CRSF_FRAME_CRC_SIZE)
+#define MSP_REQUEST_FRAME_SIZE(len) (MSP_REQUEST_PAYLOAD_LENGTH(len) + CRSF_FRAME_LENGTH_EXT_TYPE_CRC)
+
+#define MSP_SET_VTX_CONFIG_PAYLOAD_LENGTH 15
+#define MSP_SET_VTXTABLE_BAND_PAYLOAD_LENGTH 29
+#define MSP_SET_VTXTABLE_POWERLEVEL_PAYLOAD_LENGTH 7
 /**
  * Union to allow accessing the input buffer as different data shapes
  * without generating compiler warnings (and relying on undefined C++ behaviour!)
@@ -262,9 +284,6 @@ union inBuffer_U
     rcPacket_t asRCPacket_t;    // access the memory as RC data
                                 // add other packet types here
 };
-
-
-typedef struct crsf_channels_s crsf_channels_t;
 
 //CRSF_FRAMETYPE_BATTERY_SENSOR
 typedef struct crsf_sensor_battery_s
@@ -281,6 +300,37 @@ typedef struct crsf_sensor_baro_vario_s
     uint16_t altitude; // Altitude in decimeters + 10000dm, or Altitude in meters if high bit is set, BigEndian
     int16_t verticalspd;  // Vertical speed in cm/s, BigEndian
 } PACKED crsf_sensor_baro_vario_t;
+
+// CRSF_FRAMETYPE_VARIO
+typedef struct crsf_sensor_vario_s
+{
+    int16_t verticalspd;  // Vertical speed in cm/s, BigEndian
+} PACKED crsf_sensor_vario_t;
+
+// CRSF_FRAMETYPE_GPS
+typedef struct crsf_sensor_gps_s
+{
+    int32_t latitude; // degree / 10`000`000
+    int32_t longitude; // degree / 10`000`000
+    uint16_t groundspeed; // km/h / 10
+    uint16_t gps_heading; // degree / 100
+    uint16_t altitude; // meter ­1000m offset
+    uint8_t satellites_in_use; // counter
+} PACKED crsf_sensor_gps_t;
+
+// CRSF_FRAMETYPE_ATTITUDE
+typedef struct crsf_sensor_attitude_s
+{
+    int16_t pitch; // radians * 10000
+    int16_t roll; // radians * 10000
+    int16_t yaw; // radians * 10000
+} PACKED crsf_sensor_attitude_t;
+
+// CRSF_FRAMETYPE_FLIGHT_MODE
+typedef struct crsf_sensor_flight_mode_s
+{
+    char flight_mode[16];
+} PACKED crsf_flight_mode_t;
 
 /*
  * 0x14 Link statistics
@@ -308,12 +358,15 @@ typedef struct crsfPayloadLinkstatistics_s
     uint8_t active_antenna;
     uint8_t rf_Mode;
     uint8_t uplink_TX_Power;
-    uint8_t downlink_RSSI;
+    uint8_t downlink_RSSI_1;
     uint8_t downlink_Link_quality;
     int8_t downlink_SNR;
-} crsfLinkStatistics_t;
+} PACKED crsfLinkStatistics_t;
 
-typedef struct crsfPayloadLinkstatistics_s crsfLinkStatistics_t;
+typedef struct elrsLinkStatistics_s : crsfLinkStatistics_t
+{
+    uint8_t downlink_RSSI_2;
+} PACKED elrsLinkStatistics_t;
 
 // typedef struct crsfOpenTXsyncFrame_s
 // {
@@ -371,6 +424,21 @@ static inline uint16_t ICACHE_RAM_ATTR CRSF_to_N(uint16_t val, uint16_t cnt)
     if (val >= CRSF_CHANNEL_VALUE_2000)
         return cnt - 1;
     return (val - CRSF_CHANNEL_VALUE_1000) * cnt / (CRSF_CHANNEL_VALUE_2000 - CRSF_CHANNEL_VALUE_1000 + 1);
+}
+
+static inline uint8_t ICACHE_RAM_ATTR CRSF_to_SWITCH3b(uint16_t ch)
+{
+    // AUX2-7 are Low Resolution, "7pos" 6+center (3-bit)
+    // The output is mapped evenly across 6 output values (0-5)
+    // with a special value 7 indicating the middle so it works
+    // with switches with a middle position as well as 6-position
+    const uint16_t CHANNEL_BIN_COUNT = 6;
+    const uint16_t CHANNEL_BIN_SIZE = (CRSF_CHANNEL_VALUE_MAX - CRSF_CHANNEL_VALUE_MIN) / CHANNEL_BIN_COUNT;
+    // If channel is within 1/4 a BIN of being in the middle use special value 7
+    if (ch < (CRSF_CHANNEL_VALUE_MID-CHANNEL_BIN_SIZE/4)
+        || ch > (CRSF_CHANNEL_VALUE_MID+CHANNEL_BIN_SIZE/4))
+        return CRSF_to_N(ch, CHANNEL_BIN_COUNT);
+    return 7;
 }
 
 // 3b switches use 0-5 to represent 6 positions switches and "7" to represent middle

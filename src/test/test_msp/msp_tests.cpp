@@ -1,8 +1,12 @@
+#include <cstdint>
+#include <iostream>
 #include <unity.h>
 #include "msp.h"
+#include "common.h"
 #include "mock_serial.h"
 
 MSP MSPProtocol;
+uint32_t ChannelData[CRSF_NUM_CHANNELS];      // Current state of channels, CRSF format
 
 void test_msp_receive(void)
 {

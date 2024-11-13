@@ -1,7 +1,7 @@
-#if defined(TARGET_TX)
-
 #include <dynpower.h>
-#include <common.h>
+
+#if defined(TARGET_TX)
+#include <handset.h>
 #include <LBT.h>
 
 // LQ-based boost defines
@@ -88,9 +88,9 @@ void DynamicPower_Update(uint32_t now)
   // =============  DYNAMIC_POWER_BOOST: Switch-triggered power boost up ==============
   // Or if telemetry is lost while armed (done up here because dynpower_updated is only updated on telemetry)
   uint8_t boostChannel = config.GetBoostChannel();
-  bool armed = CRSF::IsArmed();
+  bool armed = handset->IsArmed();
   if ((connectionState == disconnected && armed) ||
-    (boostChannel && (CRSF_to_BIT(CRSF::ChannelData[AUX9 + boostChannel - 1]) == 0)))
+    (boostChannel && (CRSF_to_BIT(ChannelData[AUX9 + boostChannel - 1]) == 0)))
   {
     DynamicPower_SetToConfigPower();
     return;
@@ -127,8 +127,9 @@ void DynamicPower_Update(uint32_t now)
   // It should be useful for bando or sudden lost of LoS cases.
   uint32_t lq_current = CRSF::LinkStatistics.uplink_Link_quality;
 #if defined(Regulatory_Domain_EU_CE_2400)
-  // make adjustment for packets not sent because the channel was not clear
-  lq_current = lq_current * 100 / LBTSuccessCalc.getLQ();
+  // Scale up receiver LQ for packets not sent because the channel was not clear
+  // the calculation could exceed 100% during a rate change or initial connect when the LQs are not synced
+  lq_current = std::min(lq_current * 100 / std::max((uint32_t)LBTSuccessCalc.getLQ(), (uint32_t)1U), (uint32_t)100U);
 #endif
   uint32_t lq_avg = dynpower_mavg_lq;
   int32_t lq_diff = lq_avg - lq_current;
@@ -196,3 +197,32 @@ void DynamicPower_Update(uint32_t now)
 }
 
 #endif // TARGET_TX
+
+#if defined(TARGET_RX)
+
+/***
+ * @brief: Set power to configured power or update power to match the current TX power
+ * @param initialize: Set to true if calling from setup() to force even PWR_MATCH_TX to default power
+*/
+void DynamicPower_UpdateRx(bool initialize)
+{
+  if (config.GetPower() != PWR_MATCH_TX)
+  {
+    POWERMGNT::setPower((PowerLevels_e)config.GetPower());
+  } /* !PWR_MATCH_TX (fixed power) */
+  else
+  {
+    if (CRSF::clearUpdatedUplinkPower())
+    {
+      PowerLevels_e newPower = crsfpowerToPower(CRSF::LinkStatistics.uplink_TX_Power);
+      DBGLN("Matching TX power %u", newPower);
+      POWERMGNT::setPower(newPower);
+    }
+    else if (initialize)
+    {
+      POWERMGNT::setPower(POWERMGNT::getDefaultPower());
+    }
+  } /* PWR_MATCH_TX */
+}
+
+#endif // TARGET_RX

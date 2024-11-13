@@ -1,18 +1,23 @@
 #include "targets.h"
+
 #include "common.h"
 #include "device.h"
 #include "msp.h"
 #include "msptypes.h"
-#include "CRSF.h"
+#include "CRSFHandset.h"
 #include "config.h"
+#include "logging.h"
+#include "MAVLink.h"
 
 #define BACKPACK_TIMEOUT 20    // How often to check for backpack commands
 
-extern bool InBindingMode;
-extern Stream *TxBackpack;
+extern char backpackVersion[];
+extern bool headTrackingEnabled;
 
 bool TxBackpackWiFiReadyToSend = false;
 bool VRxBackpackWiFiReadyToSend = false;
+bool HTEnableFlagReadyToSend = false;
+bool BackpackTelemReadyToSend = false;
 
 bool lastRecordingState = false;
 
@@ -22,35 +27,60 @@ bool lastRecordingState = false;
 #define PASSTHROUGH_BAUD BACKPACK_LOGGING_BAUD
 #endif
 
+#define GPIO_PIN_BOOT0 0
+
 #include "CRSF.h"
 #include "hwTimer.h"
 
-void startPassthrough()
+[[noreturn]] void startPassthrough()
 {
-    // stop everyhting
+    // stop everything
     devicesStop();
     Radio.End();
     hwTimer::stop();
-    CRSF::End();
+    handset->End();
+
+    Stream *uplink = &CRSFHandset::Port;
 
     uint32_t baud = PASSTHROUGH_BAUD == -1 ? BACKPACK_LOGGING_BAUD : PASSTHROUGH_BAUD;
     // get ready for passthrough
     if (GPIO_PIN_RCSIGNAL_RX == GPIO_PIN_RCSIGNAL_TX)
     {
-        // if we have a single S.PORT pin for RX then we assume the standard UART pins for passthrough
-        CRSF::Port.begin(baud, SERIAL_8N1, 3, 1);
+        #if defined(PLATFORM_ESP32_S3)
+        // if UART0 is connected to the backpack then use the USB for the uplink
+        if (GPIO_PIN_DEBUG_RX == 44 && GPIO_PIN_DEBUG_TX == 43)
+        {
+            uplink = &Serial;
+            Serial.setTxBufferSize(1024);
+            Serial.setRxBufferSize(16384);
+        }
+        else
+        {
+            CRSFHandset::Port.begin(baud, SERIAL_8N1, 44, 43);  // pins are configured as 44 and 43
+            CRSFHandset::Port.setTxBufferSize(1024);
+            CRSFHandset::Port.setRxBufferSize(16384);
+        }
+        #else
+        CRSFHandset::Port.begin(baud, SERIAL_8N1, 3, 1);  // default pin configuration 3 and 1
+        CRSFHandset::Port.setTxBufferSize(1024);
+        CRSFHandset::Port.setRxBufferSize(16384);
+        #endif
     }
     else
     {
-        CRSF::Port.begin(baud, SERIAL_8N1, GPIO_PIN_RCSIGNAL_RX, GPIO_PIN_RCSIGNAL_TX);
+        CRSFHandset::Port.begin(baud, SERIAL_8N1, GPIO_PIN_RCSIGNAL_RX, GPIO_PIN_RCSIGNAL_TX);
+        CRSFHandset::Port.setTxBufferSize(1024);
+        CRSFHandset::Port.setRxBufferSize(16384);
     }
     disableLoopWDT();
 
-    HardwareSerial &backpack = *(HardwareSerial*)TxBackpack;
+    const auto backpack = (HardwareSerial*)TxBackpack;
     if (baud != BACKPACK_LOGGING_BAUD)
     {
-        backpack.begin(PASSTHROUGH_BAUD, SERIAL_8N1, GPIO_PIN_DEBUG_RX, GPIO_PIN_DEBUG_TX);
+        backpack->begin(PASSTHROUGH_BAUD, SERIAL_8N1, GPIO_PIN_DEBUG_RX, GPIO_PIN_DEBUG_TX);
     }
+    backpack->setRxBufferSize(1024);
+    backpack->setTxBufferSize(16384);
 
     // reset ESP8285 into bootloader mode
     digitalWrite(GPIO_PIN_BACKPACK_BOOT, HIGH);
@@ -60,28 +90,61 @@ void startPassthrough()
     digitalWrite(GPIO_PIN_BACKPACK_EN, HIGH);
     delay(50);
 
-    CRSF::Port.flush();
-    backpack.flush();
+    uplink->flush();
+    backpack->flush();
 
     uint8_t buf[64];
-    while (backpack.available())
-        backpack.readBytes(buf, sizeof(buf));
+    while (backpack->available())
+    {
+        backpack->readBytes(buf, sizeof(buf));
+    }
 
     // go hard!
     for (;;)
     {
-        int r = CRSF::Port.available();
-        if (r > sizeof(buf))
-            r = sizeof(buf);
-        r = CRSF::Port.readBytes(buf, r);
-        backpack.write(buf, r);
+        int available_bytes = uplink->available();
+        if (available_bytes > sizeof(buf))
+            available_bytes = sizeof(buf);
+        auto bytes_read = uplink->readBytes(buf, available_bytes);
+        backpack->write(buf, bytes_read);
 
-        r = backpack.available();
-        if (r > sizeof(buf))
-            r = sizeof(buf);
-        r = backpack.readBytes(buf, r);
-        CRSF::Port.write(buf, r);
+        available_bytes = backpack->available();
+        if (available_bytes > sizeof(buf))
+            available_bytes = sizeof(buf);
+        bytes_read = backpack->readBytes(buf, available_bytes);
+        uplink->write(buf, bytes_read);
     }
+}
+#endif
+
+#if defined(GPIO_PIN_BACKPACK_EN)
+
+static int debouncedRead(int pin) {
+    static const uint8_t min_matches = 100;
+
+    static int last_state = -1;
+    static uint8_t matches = 0;
+
+    int current_state;
+
+    current_state = digitalRead(pin);
+    if (current_state == last_state) {
+        matches = min(min_matches, (uint8_t)(matches + 1));
+    } else {
+        // We are bouncing. Reset the match counter.
+        matches = 0;
+        DBGLN("Bouncing!, current state: %d, last_state: %d, matches: %d", current_state, last_state, matches);
+    }
+
+    if (matches == min_matches) {
+        // We have a stable state and report it.
+        return current_state;
+    }
+
+    last_state = current_state;
+
+    // We don't have a definitive state we could report.
+    return -1;
 }
 #endif
 
@@ -90,11 +153,33 @@ void checkBackpackUpdate()
 #if defined(GPIO_PIN_BACKPACK_EN)
     if (GPIO_PIN_BACKPACK_EN != UNDEF_PIN)
     {
-        if (!digitalRead(0))
+        if (debouncedRead(GPIO_PIN_BOOT0) == 0)
         {
             startPassthrough();
         }
     }
+#if defined(PLATFORM_ESP32_S3)
+    // Start passthrough mode if an Espressif resync packet is detected on the USB port
+    static const uint8_t resync[] = {
+        0xc0,0x00,0x08,0x24,0x00,0x00,0x00,0x00,0x00,0x07,0x07,0x12,0x20,0x55,0x55,0x55,0x55,
+        0x55,0x55,0x55,0x55,0x55,0x55,0x55,0x55,0x55,0x55,0x55,0x55,0x55,0x55, 0x55,0x55,
+        0x55,0x55,0x55,0x55,0x55,0x55,0x55,0x55,0x55,0x55,0x55,0x55,0xc0
+    };
+    static int resync_pos = 0;
+    while(Serial.available())
+    {
+        int byte = Serial.read();
+        if (byte == resync[resync_pos])
+        {
+            resync_pos++;
+            if (resync_pos == sizeof(resync)) startPassthrough();
+        }
+        else
+        {
+            resync_pos = 0;
+        }
+    }
+#endif
 #endif
 }
 
@@ -109,18 +194,25 @@ static void BackpackWiFiToMSPOut(uint16_t command)
     MSP::sendPacket(&packet, TxBackpack); // send to tx-backpack as MSP
 }
 
+static void BackpackHTFlagToMSPOut(uint8_t arg)
+{
+    mspPacket_t packet;
+    packet.reset();
+    packet.makeCommand();
+    packet.function = MSP_ELRS_BACKPACK_SET_HEAD_TRACKING;
+    packet.addByte(arg);
+
+    MSP::sendPacket(&packet, TxBackpack); // send to tx-backpack as MSP
+}
+
 void BackpackBinding()
 {
     mspPacket_t packet;
     packet.reset();
     packet.makeCommand();
     packet.function = MSP_ELRS_BIND;
-    packet.addByte(MasterUID[0]);
-    packet.addByte(MasterUID[1]);
-    packet.addByte(MasterUID[2]);
-    packet.addByte(MasterUID[3]);
-    packet.addByte(MasterUID[4]);
-    packet.addByte(MasterUID[5]);
+    for (unsigned b=0; b<UID_LEN; ++b)
+        packet.addByte(UID[b]);
 
     MSP::sendPacket(&packet, TxBackpack); // send to tx-backpack as MSP
 }
@@ -140,10 +232,10 @@ static void AuxStateToMSPOut()
         return;
     }
 
-    uint8_t auxNumber = (config.GetDvrAux() - 1) / 2 + 4;
-    uint8_t auxInverted = (config.GetDvrAux() + 1) % 2;
+    const uint8_t auxNumber = (config.GetDvrAux() - 1) / 2 + 4;
+    const uint8_t auxInverted = (config.GetDvrAux() + 1) % 2;
 
-    bool recordingState = CRSF_to_BIT(CRSF::ChannelData[auxNumber]) ^ auxInverted;
+    const bool recordingState = CRSF_to_BIT(ChannelData[auxNumber]) ^ auxInverted;
 
     if (recordingState == lastRecordingState)
     {
@@ -152,17 +244,7 @@ static void AuxStateToMSPOut()
     }
     lastRecordingState = recordingState;
 
-    uint16_t delay = 0;
-
-    if (recordingState)
-    {
-        delay = GetDvrDelaySeconds(config.GetDvrStartDelay());
-    }
-
-    if (!recordingState)
-    {
-        delay = GetDvrDelaySeconds(config.GetDvrStopDelay());
-    }
+    const uint16_t delay = GetDvrDelaySeconds(recordingState ? config.GetDvrStartDelay() : config.GetDvrStopDelay());
 
     mspPacket_t packet;
     packet.reset();
@@ -176,23 +258,80 @@ static void AuxStateToMSPOut()
 #endif // USE_TX_BACKPACK
 }
 
+void sendCRSFTelemetryToBackpack(uint8_t *data)
+{
+    if (config.GetBackpackTlmMode() == BACKPACK_TELEM_MODE_OFF)
+    {
+        // Backpack telem is off
+        return;
+    }
+
+    if (config.GetLinkMode() == TX_MAVLINK_MODE)
+    {
+        // Tx is in MAVLink mode, don't forward CRSF telemetry
+        return;
+    }
+
+    mspPacket_t packet;
+    packet.reset();
+    packet.makeCommand();
+    packet.function = MSP_ELRS_BACKPACK_CRSF_TLM;
+
+    uint8_t size = CRSF_FRAME_SIZE(data[CRSF_TELEMETRY_LENGTH_INDEX]);
+    if (size > CRSF_MAX_PACKET_LEN)
+    {
+        ERRLN("CRSF frame exceeds max length");
+        return;
+    }
+
+    for (uint8_t i = 0; i < size; ++i)
+    {
+      packet.addByte(data[i]);
+    }
+
+    MSP::sendPacket(&packet, TxBackpack); // send to tx-backpack as MSP
+}
+
+void sendMAVLinkTelemetryToBackpack(uint8_t *data)
+{
+    if (config.GetBackpackTlmMode() == BACKPACK_TELEM_MODE_OFF)
+    {
+        // Backpack telem is off
+        return;
+    }
+
+    uint8_t count = data[1];
+    TxBackpack->write(data + CRSF_FRAME_NOT_COUNTED_BYTES, count);
+}
+
+void sendConfigToBackpack()
+{
+    // Send any config values to the tx-backpack, as one key/value pair per MSP msg
+    mspPacket_t packet;
+    packet.reset();
+    packet.makeCommand();
+    packet.function = MSP_ELRS_BACKPACK_CONFIG;
+    packet.addByte(MSP_ELRS_BACKPACK_CONFIG_TLM_MODE); // Backpack tlm mode
+    packet.addByte(config.GetBackpackTlmMode());
+    MSP::sendPacket(&packet, TxBackpack); // send to tx-backpack as MSP
+}
+
 static void initialize()
 {
-#ifdef GPIO_PIN_BACKPACK_EN
+#if defined(GPIO_PIN_BACKPACK_EN)
     if (GPIO_PIN_BACKPACK_EN != UNDEF_PIN)
     {
-        pinMode(0, INPUT); // setup so we can detect pinchange for passthrough mode
-        // reset the ESP8285 so we know it's running
+        pinMode(GPIO_PIN_BOOT0, INPUT); // setup so we can detect pinchange for passthrough mode
         pinMode(GPIO_PIN_BACKPACK_BOOT, OUTPUT);
         pinMode(GPIO_PIN_BACKPACK_EN, OUTPUT);
+        // Shut down the backpack via EN pin and hold it there until the first event()
         digitalWrite(GPIO_PIN_BACKPACK_EN, LOW);   // enable low
         digitalWrite(GPIO_PIN_BACKPACK_BOOT, LOW); // bootloader pin high
-        delay(50);
-        digitalWrite(GPIO_PIN_BACKPACK_EN, HIGH); // enable high
+        delay(20);
+        // Rely on event() to boot
     }
 #endif
-
-    CRSF::RCdataCallback = AuxStateToMSPOut;
+    handset->setRCDataCallback(AuxStateToMSPOut);
 }
 
 static int start()
@@ -206,10 +345,24 @@ static int start()
 
 static int timeout()
 {
+    static uint8_t versionRequestTries = 0;
+    static uint32_t lastVersionTryTime = 0;
+
     if (InBindingMode)
     {
         BackpackBinding();
         return 1000;        // don't check for another second so we don't spam too hard :-)
+    }
+
+    if (versionRequestTries < 10 && strlen(backpackVersion) == 0 && (lastVersionTryTime == 0 || millis() - lastVersionTryTime > 1000)) {
+        lastVersionTryTime = millis();
+        versionRequestTries++;
+        mspPacket_t out;
+        out.reset();
+        out.makeCommand();
+        out.function = MSP_ELRS_GET_BACKPACK_VERSION;
+        MSP::sendPacket(&out, TxBackpack);
+        DBGLN("Sending get backpack version command");
     }
 
     if (TxBackpackWiFiReadyToSend && connectionState < MODE_STATES)
@@ -223,12 +376,38 @@ static int timeout()
         VRxBackpackWiFiReadyToSend = false;
         BackpackWiFiToMSPOut(MSP_ELRS_SET_VRX_BACKPACK_WIFI_MODE);
     }
+
+    if (HTEnableFlagReadyToSend && connectionState < MODE_STATES)
+    {
+        HTEnableFlagReadyToSend = false;
+        BackpackHTFlagToMSPOut(headTrackingEnabled);
+    }
+
+    if (BackpackTelemReadyToSend && connectionState < MODE_STATES)
+    {
+        BackpackTelemReadyToSend = false;
+        sendConfigToBackpack();
+    }
+
     return BACKPACK_TIMEOUT;
+}
+
+static int event()
+{
+#if defined(GPIO_PIN_BACKPACK_EN)
+    if (OPT_USE_TX_BACKPACK && GPIO_PIN_BACKPACK_EN != UNDEF_PIN)
+    {
+        // EN should be HIGH to be active
+        digitalWrite(GPIO_PIN_BACKPACK_EN, config.GetBackpackDisable() ? LOW : HIGH);
+    }
+#endif
+
+    return DURATION_IGNORE;
 }
 
 device_t Backpack_device = {
     .initialize = initialize,
     .start = start,
-    .event = NULL,
+    .event = event,
     .timeout = timeout
 };

@@ -11,12 +11,15 @@
 #include "options.h"
 #include "logging.h"
 #include "common.h"
+#include "CRSF.h"
 
 #include "WiFi.h"
 extern WiFiMode_t wifiMode;
 
 const uint16_t *main_menu_icons[] = {
     elrs_rate,
+    elrs_switch,
+    elrs_antenna,
     elrs_power,
     elrs_ratio,
     elrs_motion,
@@ -127,11 +130,10 @@ void TFTDisplay::init()
         pinMode(GPIO_PIN_TFT_BL, OUTPUT);
     }
     bus = new Arduino_ESP32SPI(GPIO_PIN_TFT_DC, GPIO_PIN_TFT_CS, GPIO_PIN_TFT_SCLK, GPIO_PIN_TFT_MOSI, GFX_NOT_DEFINED, HSPI);
-    gfx = new Arduino_ST7735(bus, GPIO_PIN_TFT_RST, 1 /* rotation */, true , 80, 160, 26, 1, 26, 1);
+    gfx = new Arduino_ST7735(bus, GPIO_PIN_TFT_RST, OPT_OLED_REVERSED ? 3 : 1 /* rotation */, true , 80, 160, 26, 1, 26, 1);
 
     gfx->begin();
     doScreenBackLight(SCREEN_BACKLIGHT_ON);
-    displaySplashScreen();
 }
 
 void TFTDisplay::doScreenBackLight(screen_backlight_t state)
@@ -169,7 +171,12 @@ void TFTDisplay::displaySplashScreen()
 {
     gfx->fillScreen(WHITE);
 
-    gfx->draw16bitRGBBitmap(0, 0, vendor_logo, INIT_PAGE_LOGO_X, INIT_PAGE_LOGO_Y);
+    size_t sz = INIT_PAGE_LOGO_X * INIT_PAGE_LOGO_Y;
+    uint16_t image[sz];
+    if (spi_flash_read(logo_image, image, sz * 2) == ESP_OK)
+    {
+        gfx->draw16bitRGBBitmap(0, 0, image, INIT_PAGE_LOGO_X, INIT_PAGE_LOGO_Y);
+    }
 
     gfx->fillRect(SCREEN_FONT_GAP, INIT_PAGE_FONT_START_Y - INIT_PAGE_FONT_PADDING,
                     SCREEN_X - SCREEN_FONT_GAP*2, SCREEN_NORMAL_FONT_SIZE + INIT_PAGE_FONT_PADDING*2, BLACK);
@@ -374,6 +381,66 @@ void TFTDisplay::displaySending()
 
     displayFontCenter(SUB_PAGE_BINDING_WORD_START_X, SCREEN_X, SUB_PAGE_BINDING_WORD_START_Y,  SCREEN_LARGE_FONT_SIZE, SCREEN_LARGE_FONT,
                         "SENDING...", BLACK, WHITE);
+}
+
+void TFTDisplay::displayLinkstats()
+{
+    constexpr int16_t LINKSTATS_COL_FIRST   = 0;
+    constexpr int16_t LINKSTATS_COL_SECOND  = 30;
+    constexpr int16_t LINKSTATS_COL_THIRD   = 100;
+
+    constexpr int16_t LINKSTATS_ROW_FIRST   = 10;
+    constexpr int16_t LINKSTATS_ROW_SECOND  = 25;
+    constexpr int16_t LINKSTATS_ROW_THIRD   = 40;
+    constexpr int16_t LINKSTATS_ROW_FOURTH  = 55;
+    constexpr int16_t LINKSTATS_ROW_FIFTH   = 70;
+
+    gfx->fillScreen(WHITE);
+    gfx->setFont(&SCREEN_SMALL_FONT);
+    gfx->setTextColor(BLACK, WHITE);
+
+    gfx->setCursor(LINKSTATS_COL_FIRST, LINKSTATS_ROW_SECOND);
+    gfx->print("LQ");
+    gfx->setCursor(LINKSTATS_COL_FIRST, LINKSTATS_ROW_THIRD);
+    gfx->print("RSSI");
+    gfx->setCursor(LINKSTATS_COL_FIRST, LINKSTATS_ROW_FOURTH);
+    gfx->print("SNR");
+    gfx->setCursor(LINKSTATS_COL_FIRST, LINKSTATS_ROW_FIFTH);
+    gfx->print("Ant");
+
+    // Uplink Linkstats
+    gfx->setCursor(LINKSTATS_COL_SECOND, LINKSTATS_ROW_FIRST);
+    gfx->print("Uplink");
+    gfx->setCursor(LINKSTATS_COL_SECOND, LINKSTATS_ROW_SECOND);
+    gfx->print(CRSF::LinkStatistics.uplink_Link_quality);
+    gfx->setCursor(LINKSTATS_COL_SECOND, LINKSTATS_ROW_THIRD);
+    gfx->print((int8_t)CRSF::LinkStatistics.uplink_RSSI_1);
+    if (CRSF::LinkStatistics.uplink_RSSI_2 != 0)
+    {
+        gfx->print('/');
+        gfx->print((int8_t)CRSF::LinkStatistics.uplink_RSSI_2);
+    }
+
+    gfx->setCursor(LINKSTATS_COL_SECOND, LINKSTATS_ROW_FOURTH);
+    gfx->print(CRSF::LinkStatistics.uplink_SNR);
+    gfx->setCursor(LINKSTATS_COL_SECOND, LINKSTATS_ROW_FIFTH);
+    gfx->print(CRSF::LinkStatistics.active_antenna);
+
+    // Downlink Linkstats
+    gfx->setCursor(LINKSTATS_COL_THIRD, LINKSTATS_ROW_FIRST);
+    gfx->print("Downlink");
+    gfx->setCursor(LINKSTATS_COL_THIRD, LINKSTATS_ROW_SECOND);
+    gfx->print(CRSF::LinkStatistics.downlink_Link_quality);
+    gfx->setCursor(LINKSTATS_COL_THIRD, LINKSTATS_ROW_THIRD);
+    gfx->print((int8_t)CRSF::LinkStatistics.downlink_RSSI_1);
+    if (isDualRadio())
+    {
+        gfx->print('/');
+        gfx->print((int8_t)CRSF::LinkStatistics.downlink_RSSI_2);
+    }
+
+    gfx->setCursor(LINKSTATS_COL_THIRD, LINKSTATS_ROW_FOURTH);
+    gfx->print(CRSF::LinkStatistics.downlink_SNR);
 }
 
 #endif

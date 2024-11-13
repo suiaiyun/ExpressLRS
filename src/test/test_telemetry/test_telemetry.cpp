@@ -2,7 +2,10 @@
 #include <telemetry.h>
 #include <unity.h>
 
+#include "common.h"
+
 Telemetry telemetry;
+uint32_t ChannelData[CRSF_NUM_CHANNELS];      // Current state of channels, CRSF format
 
 int sendData(uint8_t *data, int length)
 {

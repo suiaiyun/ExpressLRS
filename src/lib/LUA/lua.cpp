@@ -5,12 +5,10 @@
 
 #ifdef TARGET_RX
 #include "telemetry.h"
-#endif
 
-extern CRSF crsf;
-
-#ifdef TARGET_RX
 extern Telemetry telemetry;
+#else
+#include "CRSFHandset.h"
 #endif
 
 //LUA VARIABLES//
@@ -20,8 +18,12 @@ static uint8_t luaWarningFlags = 0b00000000; //8 flag, 1 bit for each flag. set 
 static void (*devicePingCallback)() = nullptr;
 #endif
 
-#define LUA_MAX_PARAMS 32
+#define LUA_MAX_PARAMS 64
+static uint8_t parameterType;
+static uint8_t parameterIndex;
+static uint8_t parameterArg;
 static volatile bool UpdateParamReq = false;
+
 static struct luaPropertiesCommon *paramDefinitions[LUA_MAX_PARAMS] = {0}; // array of luaItem_*
 static luaCallback paramCallbacks[LUA_MAX_PARAMS] = {0};
 static uint8_t lastLuaField = 0;
@@ -140,7 +142,7 @@ static uint8_t sendCRSFparam(crsf_frame_type_e frameType, uint8_t fieldChunk, st
 #ifdef TARGET_TX
   // Set the hidden flag
   chunkBuffer[3] |= luaData->type & CRSF_FIELD_HIDDEN ? 0x80 : 0;
-  if (crsf.elrsLUAmode) {
+  if (CRSFHandset::elrsLUAmode) {
     chunkBuffer[3] |= luaData->type & CRSF_FIELD_ELRS_HIDDEN ? 0x80 : 0;
   }
 #else
@@ -193,7 +195,7 @@ static uint8_t sendCRSFparam(crsf_frame_type_e frameType, uint8_t fieldChunk, st
   // 6 bytes CRSF header/CRC: Dest, Len, Type, ExtSrc, ExtDst, CRC
   // 2 bytes Lua chunk header: FieldId, ChunksRemain
 #ifdef TARGET_TX
-  uint8_t chunkMax = CRSF::GetMaxPacketBytes() - 6 - 2;
+  uint8_t chunkMax = handset->GetMaxPacketBytes() - 6 - 2;
 #else
   uint8_t chunkMax = CRSF_MAX_PACKET_LEN - 6 - 2;
 #endif
@@ -207,11 +209,11 @@ static uint8_t sendCRSFparam(crsf_frame_type_e frameType, uint8_t fieldChunk, st
   chunkStart[0] = luaData->id;                 // FieldId
   chunkStart[1] = chunkCnt - (fieldChunk + 1); // ChunksRemain
 #ifdef TARGET_TX
-  CRSF::packetQueueExtended(frameType, chunkStart, chunkSize + 2);
+  CRSFHandset::packetQueueExtended(frameType, chunkStart, chunkSize + 2);
 #else
   memcpy(paramInformation + sizeof(crsf_ext_header_t),chunkStart,chunkSize + 2);
 
-  crsf.SetExtendedHeaderAndCrc(paramInformation, frameType, chunkSize + CRSF_FRAME_LENGTH_EXT_TYPE_CRC + 2, CRSF_ADDRESS_CRSF_RECEIVER, CRSF_ADDRESS_CRSF_TRANSMITTER);
+  CRSF::SetExtendedHeaderAndCrc(paramInformation, frameType, chunkSize + CRSF_FRAME_LENGTH_EXT_TYPE_CRC + 2, CRSF_ADDRESS_CRSF_RECEIVER, CRSF_ADDRESS_CRSF_TRANSMITTER);
 
   telemetry.AppendTelemetryPackage(paramInformation);
 #endif
@@ -257,7 +259,7 @@ static void updateElrsFlags()
 {
   setLuaWarningFlag(LUA_FLAG_MODEL_MATCH, connectionState == connected && connectionHasModelMatch == false);
   setLuaWarningFlag(LUA_FLAG_CONNECTED, connectionState == connected);
-  setLuaWarningFlag(LUA_FLAG_ISARMED, crsf.IsArmed());
+  setLuaWarningFlag(LUA_FLAG_ISARMED, handset->IsArmed());
 }
 
 void sendELRSstatus()
@@ -285,13 +287,13 @@ void sendELRSstatus()
   uint8_t buffer[sizeof(tagLuaElrsParams) + strlen(warningInfo) + 1];
   struct tagLuaElrsParams * const params = (struct tagLuaElrsParams *)buffer;
 
-  params->pktsBad = crsf.BadPktsCountResult;
-  params->pktsGood = htobe16(crsf.GoodPktsCountResult);
+  params->pktsBad = CRSFHandset::BadPktsCountResult;
+  params->pktsGood = htobe16(CRSFHandset::GoodPktsCountResult);
   params->flags = luaWarningFlags;
   // to support sending a params.msg, buffer should be extended by the strlen of the message
   // and copied into params->msg (with trailing null)
   strcpy(params->msg, warningInfo);
-  crsf.packetQueueExtended(0x2E, &buffer, sizeof(buffer));
+  CRSFHandset::packetQueueExtended(0x2E, &buffer, sizeof(buffer));
 }
 
 void luaRegisterDevicePingCallback(void (*callback)())
@@ -301,8 +303,11 @@ void luaRegisterDevicePingCallback(void (*callback)())
 
 #endif
 
-void ICACHE_RAM_ATTR luaParamUpdateReq()
+void luaParamUpdateReq(uint8_t type, uint8_t index, uint8_t arg)
 {
+  parameterType = type;
+  parameterIndex = index;
+  parameterArg = arg;
   UpdateParamReq = true;
 }
 
@@ -345,22 +350,22 @@ bool luaHandleUpdateParameter()
     return false;
   }
 
-  switch(crsf.ParameterUpdateData[0])
+  switch(parameterType)
   {
     case CRSF_FRAMETYPE_PARAMETER_WRITE:
-      if (crsf.ParameterUpdateData[1] == 0)
+      if (parameterIndex == 0)
       {
         // special case for elrs linkstat request
 #ifdef TARGET_TX
         DBGVLN("ELRS status request");
         updateElrsFlags();
         sendELRSstatus();
-      } else if (crsf.ParameterUpdateData[1] == 0x2E) {
+      } else if (parameterIndex == 0x2E) {
         luaSupressCriticalErrors();
 #endif
       } else {
-        uint8_t id = crsf.ParameterUpdateData[1];
-        uint8_t arg = crsf.ParameterUpdateData[2];
+        uint8_t id = parameterIndex;
+        uint8_t arg = parameterArg;
         struct luaPropertiesCommon *p = paramDefinitions[id];
         DBGLN("Set Lua [%s]=%u", p->name, arg);
         if (id < LUA_MAX_PARAMS && paramCallbacks[id]) {
@@ -386,8 +391,8 @@ bool luaHandleUpdateParameter()
 
     case CRSF_FRAMETYPE_PARAMETER_READ:
       {
-        uint8_t fieldId = crsf.ParameterUpdateData[1];
-        uint8_t fieldChunk = crsf.ParameterUpdateData[2];
+        uint8_t fieldId = parameterIndex;
+        uint8_t fieldChunk = parameterArg;
         DBGVLN("Read lua param %u %u", fieldId, fieldChunk);
         if (fieldId < LUA_MAX_PARAMS && paramDefinitions[fieldId])
         {
@@ -404,8 +409,19 @@ bool luaHandleUpdateParameter()
       }
       break;
 
+#if defined(TARGET_RX)
+    // This is a bit of a hack, it just so happens that the parameterIndex and parameterArg parameters
+    // are in the same place as the bind command. This should be handled further up the receive chain
+    // but the call in Telemetry.ShouldCallEnterBind() only works if serial data is coming in so the
+    // whole stack needs a bit of a refactor to not have similar code duplicated all over
+    case CRSF_FRAMETYPE_COMMAND:
+      if (parameterIndex == CRSF_COMMAND_SUBCMD_RX && parameterArg == CRSF_COMMAND_SUBCMD_RX_BIND)
+        EnterBindingModeSafely();
+      break;
+#endif
+
     default:
-      DBGLN("Unknown LUA %x", crsf.ParameterUpdateData[0]);
+      DBGLN("Unknown LUA %x", parameterType);
   }
 
   UpdateParamReq = false;
@@ -415,12 +431,12 @@ bool luaHandleUpdateParameter()
 void sendLuaDevicePacket(void)
 {
   uint8_t deviceInformation[DEVICE_INFORMATION_LENGTH];
-  crsf.GetDeviceInformation(deviceInformation, lastLuaField);
+  CRSF::GetDeviceInformation(deviceInformation, lastLuaField);
   // does append header + crc again so substract size from length
 #ifdef TARGET_TX
-  crsf.packetQueueExtended(CRSF_FRAMETYPE_DEVICE_INFO, deviceInformation + sizeof(crsf_ext_header_t), DEVICE_INFORMATION_PAYLOAD_LENGTH);
+  CRSFHandset::packetQueueExtended(CRSF_FRAMETYPE_DEVICE_INFO, deviceInformation + sizeof(crsf_ext_header_t), DEVICE_INFORMATION_PAYLOAD_LENGTH);
 #else
-  crsf.SetExtendedHeaderAndCrc(deviceInformation, CRSF_FRAMETYPE_DEVICE_INFO, DEVICE_INFORMATION_FRAME_SIZE, CRSF_ADDRESS_CRSF_RECEIVER, CRSF_ADDRESS_CRSF_TRANSMITTER);
+  CRSF::SetExtendedHeaderAndCrc(deviceInformation, CRSF_FRAMETYPE_DEVICE_INFO, DEVICE_INFORMATION_FRAME_SIZE, CRSF_ADDRESS_CRSF_RECEIVER, CRSF_ADDRESS_CRSF_TRANSMITTER);
   telemetry.AppendTelemetryPackage(deviceInformation);
 #endif
 }
