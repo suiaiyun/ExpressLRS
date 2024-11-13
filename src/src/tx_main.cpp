@@ -1303,7 +1303,7 @@ static void setupTarget()
   digitalWrite(GPIO_PIN_UART2TX_INVERT, HIGH);
   HardwareSerial *uart3 = new HardwareSerial(USART3);
   uart3->begin(57600);
-  CRSF::PortSecondary = uart3;
+  CRSFHandset::PortSecondary = uart3;
 #endif
 
 #if defined(TARGET_TX_FM30_MINI)
