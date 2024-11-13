@@ -30,6 +30,6 @@
 
 // Power output
 #define MinPower                PWR_10mW
-#define HighPower               PWR_100mW
-#define MaxPower                PWR_250mW
+#define HighPower               PWR_250mW
+#define MaxPower                PWR_500mW
 #define POWER_OUTPUT_VALUES     {-15,-11,-7,-1,6}
