@@ -85,16 +85,11 @@ extern "C" {
 #define NUM_ANALOG_FIRST        20
 
 // On-board LED pin number
-#if defined(ARDUINO_BLUEPILL_F103C6) || defined(ARDUINO_BLUEPILL_F103C8) ||\
-    defined(ARDUINO_BLUEPILL_F103CB)
 #define LED_BUILTIN             PC13
-#else
-#ifndef LED_BUILTIN
-// Default for Blackpill
-#define LED_BUILTIN             PB12
-#endif
-#endif
 #define LED_GREEN               LED_BUILTIN
+
+// On-board user button
+#define USER_BTN                PA15
 
 // SPI Definitions
 #define PIN_SPI_SS              PA4
