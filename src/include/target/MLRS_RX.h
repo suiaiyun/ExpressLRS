@@ -1,5 +1,5 @@
 #ifndef DEVICE_NAME
-#define DEVICE_NAME          "MLRS E28 Rx"
+#define DEVICE_NAME          "ElfinRC Rx"
 #endif
 
 #define TARGET_RX_MLRS
