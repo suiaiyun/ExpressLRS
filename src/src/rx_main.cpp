@@ -147,6 +147,8 @@ uint32_t serialBaud;
     HardwareSerial SERIAL_PROTOCOL_TX(USART2);
 #elif defined(TARGET_DIY_900_RX_STM32)
     HardwareSerial SERIAL_PROTOCOL_TX(USART1);
+#elif defined(TARGET_RX_MLRS)
+    HardwareSerial SERIAL_PROTOCOL_TX(USART2);
 #else
     #define SERIAL_PROTOCOL_TX Serial
 

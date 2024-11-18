@@ -26,6 +26,8 @@
 
 #define GPIO_PIN_DEBUG_RX       PB11 // UART3 (Bluetooth)
 #define GPIO_PIN_DEBUG_TX       PB10 // UART3 (Bluetooth)
+#define BACKPACK_LOGGING_BAUD   57600
+
 #define GPIO_PIN_UART2RX_INVERT PC15 // XOR chip
 #define GPIO_PIN_UART2TX_INVERT PB9 // XOR chip
 
