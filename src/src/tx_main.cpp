@@ -1229,6 +1229,17 @@ static void setupSerial()
   #else
     Stream *serialPort = new NullStream();
   #endif
+#elif defined(TARGET_TX_MLRS)
+  #if (defined(GPIO_PIN_DEBUG_RX) && GPIO_PIN_DEBUG_RX != UNDEF_PIN) || (defined(GPIO_PIN_DEBUG_TX) && GPIO_PIN_DEBUG_TX != UNDEF_PIN)
+    HardwareSerial *serialPort = new HardwareSerial(GPIO_PIN_DEBUG_RX, GPIO_PIN_DEBUG_TX);
+    #if defined(BACKPACK_LOGGING_BAUD)
+      serialPort->begin(BACKPACK_LOGGING_BAUD);
+    #else
+      serialPort->begin(460800);
+    #endif
+  #else
+    Stream *serialPort = new NullStream();
+  #endif
 #elif (defined(GPIO_PIN_DEBUG_RX) && GPIO_PIN_DEBUG_RX != UNDEF_PIN) || (defined(GPIO_PIN_DEBUG_TX) && GPIO_PIN_DEBUG_TX != UNDEF_PIN)
   HardwareSerial *serialPort = new HardwareSerial(2);
   #if defined(GPIO_PIN_DEBUG_RX) && GPIO_PIN_DEBUG_RX != UNDEF_PIN
@@ -1301,9 +1312,6 @@ static void setupTarget()
   digitalWrite(GPIO_PIN_UART2RX_INVERT, HIGH);
   pinMode(GPIO_PIN_UART2TX_INVERT, OUTPUT);
   digitalWrite(GPIO_PIN_UART2TX_INVERT, HIGH);
-//   HardwareSerial *uart3 = new HardwareSerial(USART3);
-//   uart3->begin(57600);
-//   CRSFHandset::PortSecondary = uart3;
 #endif
 
 #if defined(TARGET_TX_FM30_MINI)
