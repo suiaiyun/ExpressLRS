@@ -247,7 +247,7 @@ struct luaItem_selection luaBluetoothTelem = {
 struct luaItem_selection luaBluetoothTelem = {
     {"BT Telemetry", CRSF_TEXT_SELECTION},
     1, // value
-    "On",
+    luastrOffOn,
     STR_EMPTYSPACE
 };
 #endif
